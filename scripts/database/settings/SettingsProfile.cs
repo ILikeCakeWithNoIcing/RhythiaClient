@@ -198,6 +198,12 @@ public partial class SettingsProfile
     public SettingsItem<bool> SimpleHUD { get; private set; }
 
     /// <summary>
+    /// Toggles super minimal HUD
+    /// </summary>
+    [Order]
+    public SettingsItem<bool> SuperSimpleHUD { get; private set; }
+
+    /// <summary>
     /// Toggles a popup on a hit
     /// </summary>
     [Order]
@@ -727,6 +733,14 @@ public partial class SettingsProfile
             Id = "SimpleHUD",
             Title = "Simple HUD",
             Description = "Toggles a minimal HUD",
+            Section = SettingsSection.Visual,
+        };
+
+        SuperSimpleHUD = new(false)
+        {
+            Id = "SuperSimpleHUD",
+            Title = "Super Simple HUD",
+            Description = "Hides health bar, song duration, and song name",
             Section = SettingsSection.Visual,
         };
 
