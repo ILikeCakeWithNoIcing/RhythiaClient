@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
@@ -638,7 +638,8 @@ public partial class LegacyRunner : BaseScene
                 SoundManager.Song.Play();
             }
 
-            SoundManager.Song.Seek((float)CurrentAttempt.Progress / 1000);
+            double audioTime = Math.Max(0, CurrentAttempt.Progress + settings.LocalOffset.Value);
+            SoundManager.Song.Seek((float)audioTime / 1000);
         };
         replayViewerSeek.FocusEntered += () =>
         {
@@ -764,6 +765,14 @@ public partial class LegacyRunner : BaseScene
         {
             SoundManager.Song.Stream = Util.Audio.LoadStream(CurrentAttempt.Map.AudioBuffer);
             SoundManager.Song.PitchScale = (float)CurrentAttempt.Speed;
+        }
+
+        if (CurrentAttempt.Map.Notes != null && CurrentAttempt.Map.Notes.Length > 0)
+        {
+            MapLength = CurrentAttempt.Map.Notes[^1].Millisecond;
+        }
+        else if (CurrentAttempt.Map.AudioBuffer != null)
+        {
             MapLength = (float)SoundManager.Song.Stream.GetLength() * 1000;
         }
         else
@@ -771,7 +780,7 @@ public partial class LegacyRunner : BaseScene
             MapLength = CurrentAttempt.Map.Length + 1000;
         }
 
-        MapLength += Constants.HIT_WINDOW;
+        MapLength += Constants.HIT_WINDOW + 1000;
 
         // TODO: Fix videos
 
@@ -988,25 +997,21 @@ public partial class LegacyRunner : BaseScene
 
         if (CurrentAttempt.Map.AudioBuffer != null)
         {
-            if (CurrentAttempt.Progress >= MapLength - Constants.HIT_WINDOW)
-            {
-                if (SoundManager.Song.Playing)
-                {
-                    SoundManager.Song.Stop();
-                }
-            }
-            else if (!SoundManager.Song.Playing && CurrentAttempt.Progress >= 0)
+            double audioTime = CurrentAttempt.Progress + settings.LocalOffset.Value;
+            if (!SoundManager.Song.Playing && audioTime >= 0 && CurrentAttempt.Progress < MapLength)
             {
                 SoundManager.Song.Play();
-                SoundManager.Song.Seek((float)CurrentAttempt.Progress / 1000);
+                SoundManager.Song.Seek((float)audioTime / 1000);
             }
         }
 
         if (CurrentAttempt.Map.VideoBuffer != null)
         {
-            if (settings.VideoDim < 100 && !video.IsPlaying() && CurrentAttempt.Progress >= 0)
+            double videoTime = CurrentAttempt.Progress + settings.LocalOffset.Value;
+            if (settings.VideoDim < 100 && !video.IsPlaying() && videoTime >= 0)
             {
                 video.Play();
+                video.StreamPosition = (float)videoTime / 1000;
 
                 Tween videoInTween = videoQuad.CreateTween();
                 videoInTween.TweenProperty(videoQuad, "transparency", (float)settings.VideoDim / 100, 0.5);
@@ -1369,8 +1374,9 @@ public partial class LegacyRunner : BaseScene
                         SoundManager.Song.Play();
                     }
 
-                    SoundManager.Song.Seek((float)CurrentAttempt.Progress / 1000);
-                    video.StreamPosition = (float)CurrentAttempt.Progress / 1000;
+                    double targetTime = Math.Max(0, CurrentAttempt.Progress + settings.LocalOffset.Value);
+                    SoundManager.Song.Seek((float)targetTime / 1000);
+                    video.StreamPosition = (float)targetTime / 1000;
                 }
             }
         }

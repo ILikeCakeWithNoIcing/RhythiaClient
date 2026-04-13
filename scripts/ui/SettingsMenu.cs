@@ -290,6 +290,8 @@ public partial class SettingsMenu : ColorRect
                 value = double.Parse(lineEdit.PlaceholderText, System.Globalization.CultureInfo.InvariantCulture);
             }
 
+            value = Math.Clamp(value, setting.Slider.MinValue, setting.Slider.MaxValue);
+
             if ((double)setting.GetVariant() != value) { setting.SetVariant(value); }
         }
 
@@ -401,6 +403,15 @@ public partial class SettingsMenu : ColorRect
         button.Text = setting.Title;
         button.TooltipText = setting.Description;
         button.Visible = true;
-        button.Pressed += () => { setting.OnPressed?.Invoke(); };
+
+        ulong lastPressedAt = 0;
+        button.Pressed += () =>
+        {
+            ulong now = Time.GetTicksMsec();
+            if (now - lastPressedAt < 250) { return; }
+
+            lastPressedAt = now;
+            setting.OnPressed?.Invoke();
+        };
     }
 }
