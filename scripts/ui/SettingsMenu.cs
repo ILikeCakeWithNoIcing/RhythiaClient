@@ -290,8 +290,6 @@ public partial class SettingsMenu : ColorRect
                 value = double.Parse(lineEdit.PlaceholderText, System.Globalization.CultureInfo.InvariantCulture);
             }
 
-            value = Math.Clamp(value, setting.Slider.MinValue, setting.Slider.MaxValue);
-
             if ((double)setting.GetVariant() != value) { setting.SetVariant(value); }
         }
 
