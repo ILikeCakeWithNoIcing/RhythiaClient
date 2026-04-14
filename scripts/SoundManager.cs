@@ -35,6 +35,7 @@ public partial class SoundManager : Node, ISkinnable
     private static bool volumePopupShown = false;
     private static ulong lastVolumeChange = 0;
     private static bool? jeeping = null; // we're jeeping (last state of a song)
+    private static bool menuMusicPausedByUser = false;
 
     public override void _Ready()
     {
@@ -207,6 +208,7 @@ public partial class SoundManager : Node, ISkinnable
         }
 
         MenuMusic?.Stop();
+        menuMusicPausedByUser = false;
 
         Map = map;
 
@@ -264,6 +266,7 @@ public partial class SoundManager : Node, ISkinnable
         Song.StreamPaused = false;
         Song.PitchScale = (float)Lobby.Speed;
         MenuMusic?.Stop();
+        menuMusicPausedByUser = false;
 
         Map = map;
         Scope = PlaybackScope.Preview;
@@ -309,6 +312,53 @@ public partial class SoundManager : Node, ISkinnable
         Instance.JukeboxEmpty?.Invoke();
 
         RefreshMenuMusicPlayback();
+    }
+
+    public static bool IsJukeboxPaused()
+    {
+        if (Song != null && Song.StreamPaused)
+        {
+            return true;
+        }
+
+        return menuMusicPausedByUser;
+    }
+
+    public static bool ToggleJukeboxPause()
+    {
+        if (Song != null && (Song.Playing || Song.StreamPaused))
+        {
+            Song.StreamPaused = !Song.StreamPaused;
+            return Song.StreamPaused;
+        }
+
+        if (MenuMusic == null || MenuMusic.Stream == null)
+        {
+            return false;
+        }
+
+        if (!shouldPlayMenuMusic() && !menuMusicPausedByUser)
+        {
+            return false;
+        }
+
+        menuMusicPausedByUser = !menuMusicPausedByUser;
+
+        if (menuMusicPausedByUser)
+        {
+            MenuMusic.StreamPaused = true;
+        }
+        else
+        {
+            if (!MenuMusic.Playing)
+            {
+                MenuMusic.Play();
+            }
+
+            MenuMusic.StreamPaused = false;
+        }
+
+        return menuMusicPausedByUser;
     }
 
     private static bool isScopedPlayback()
@@ -375,11 +425,26 @@ public partial class SoundManager : Node, ISkinnable
             return;
         }
 
+        if (menuMusicPausedByUser)
+        {
+            if (MenuMusic.Playing && !MenuMusic.StreamPaused)
+            {
+                MenuMusic.StreamPaused = true;
+            }
+
+            return;
+        }
+
         if (shouldPlayMenuMusic())
         {
             if (!MenuMusic.Playing)
             {
                 MenuMusic.Play();
+            }
+
+            if (MenuMusic.StreamPaused)
+            {
+                MenuMusic.StreamPaused = false;
             }
         }
         else if (MenuMusic.Playing)

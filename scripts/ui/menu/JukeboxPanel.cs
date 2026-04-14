@@ -72,6 +72,9 @@ public partial class JukeboxPanel : Panel, ISkinnable
 
         spectrumMaterial.SetShaderParameter("progress", progress);
         spectrumMaterial.SetShaderParameter("margin", 1 - spectrum.Size.X / GetViewport().GetVisibleRect().Size.X);
+
+        var skin = SkinManager.Instance.Skin;
+        pauseButton.TextureNormal = SoundManager.IsJukeboxPaused() ? skin.JukeboxPlayImage : skin.JukeboxPauseImage;
     }
 
     public override void _Input(InputEvent @event)
@@ -112,16 +115,15 @@ public partial class JukeboxPanel : Panel, ISkinnable
     {
         skin ??= SkinManager.Instance.Skin;
 
-        pauseButton.TextureNormal = SoundManager.Song.Playing ? skin.JukeboxPauseImage : skin.JukeboxPlayImage;
+        pauseButton.TextureNormal = SoundManager.IsJukeboxPaused() ? skin.JukeboxPlayImage : skin.JukeboxPauseImage;
         skipButton.TextureNormal = skin.JukeboxSkipImage;
         rewindButton.TextureNormal = skin.JukeboxSkipImage;
     }
 
     private void pause()
     {
-        var skin = SkinManager.Instance.Skin;
-        SoundManager.Song.StreamPaused = !SoundManager.Song.StreamPaused;
-        pauseButton.TextureNormal = SoundManager.Song.Playing ? skin.JukeboxPauseImage : skin.JukeboxPlayImage;
+        SoundManager.ToggleJukeboxPause();
+        UpdateSkin();
     }
 
     private void skip()

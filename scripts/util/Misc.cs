@@ -68,15 +68,26 @@ namespace Util
                 return img;
             }
 
-            foreach (var load in new Func<byte[], Error>[] {
-                img.LoadJpgFromBuffer,
-                img.LoadWebpFromBuffer,
-                img.LoadBmpFromBuffer,
-            })
+            bool isJpeg = buffer.Length >= 3 && buffer[0] == 0xFF && buffer[1] == 0xD8 && buffer[2] == 0xFF;
+            if (isJpeg && img.LoadJpgFromBuffer(buffer) == Error.Ok)
             {
-                if (load(buffer) == Error.Ok)
-                    return img;
+                return img;
             }
+
+            bool isBmp = buffer.Length >= 2 && buffer[0] == 0x42 && buffer[1] == 0x4D;
+            if (isBmp && img.LoadBmpFromBuffer(buffer) == Error.Ok)
+            {
+                return img;
+            }
+
+            bool isWebp = buffer.Length >= 12
+                && buffer[0] == 0x52 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x46
+                && buffer[8] == 0x57 && buffer[9] == 0x45 && buffer[10] == 0x42 && buffer[11] == 0x50;
+            if (isWebp && img.LoadWebpFromBuffer(buffer) == Error.Ok)
+            {
+                return img;
+            }
+
             return null;
         }
 

@@ -128,7 +128,10 @@ public partial class MapManager : Node
                 }
             }
 
-            Callable.From(() => ToastNotification.Notify($"Deleted {map.PrettyTitle}!")).CallDeferred();
+                Callable.From(() =>
+                {
+                    _ = ToastNotification.Notify($"Deleted {map.PrettyTitle}!");
+                }).CallDeferred();
             Callable.From(() => MapDeleted?.Invoke(map)).CallDeferred();
         }
         catch (Exception e)
