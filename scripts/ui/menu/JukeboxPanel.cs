@@ -100,6 +100,14 @@ public partial class JukeboxPanel : Panel, ISkinnable
     {
         title.Text = "";
         Map = null;
+        selectButton.Disabled = true;
+    }
+
+    public void ShowMenuTheme()
+    {
+        title.Text = "Menu Theme";
+        Map = null;
+        selectButton.Disabled = true;
     }
 
     public void UpdateMap(Map map)
@@ -107,6 +115,7 @@ public partial class JukeboxPanel : Panel, ISkinnable
         Map = map;
 
         title.Text = map.PrettyTitle;
+        selectButton.Disabled = false;
 
         pauseButton.TextureNormal = SkinManager.Instance.Skin.JukeboxPauseImage;
     }
@@ -157,6 +166,11 @@ public partial class JukeboxPanel : Panel, ISkinnable
 
     private void select()
     {
+        if (Map == null)
+        {
+            return;
+        }
+
         MapList.Instance.Select(Map, false);
     }
 }

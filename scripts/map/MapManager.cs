@@ -112,21 +112,6 @@ public partial class MapManager : Node
             MapCache.RemoveMap(map);
             Maps.RemoveAll(x => x.Id == map.Id);
 
-            SoundManager.UpdateJukeboxQueue();
-            if (SoundManager.Map?.Name == map.Name)
-            {
-                if (SoundManager.JukeboxQueue.Length == 0)
-                {
-                    SoundManager.Song.Stop();
-                    SoundManager.Map = null;
-                    Callable.From(() => JukeboxPanel.Instance?.ClearMap()).CallDeferred();
-                }
-                else
-                {
-                    SoundManager.JukeboxIndex = Math.Clamp(SoundManager.JukeboxIndex, 0, SoundManager.JukeboxQueue.Length - 1);
-                    Callable.From(() => SoundManager.PlayJukebox(SoundManager.JukeboxIndex)).CallDeferred();
-                }
-            }
 
                 Callable.From(() =>
                 {

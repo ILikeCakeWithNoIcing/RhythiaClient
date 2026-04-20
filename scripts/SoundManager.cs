@@ -350,12 +350,14 @@ public partial class SoundManager : Node, ISkinnable
         }
         else
         {
-            if (!MenuMusic.Playing)
+            if (MenuMusic.StreamPaused)
+            {
+                MenuMusic.StreamPaused = false;
+            }
+            else if (!MenuMusic.Playing)
             {
                 MenuMusic.Play();
             }
-
-            MenuMusic.StreamPaused = false;
         }
 
         return menuMusicPausedByUser;
@@ -432,24 +434,33 @@ public partial class SoundManager : Node, ISkinnable
                 MenuMusic.StreamPaused = true;
             }
 
+            JukeboxPanel.Instance?.ShowMenuTheme();
+
             return;
         }
 
         if (shouldPlayMenuMusic())
         {
-            if (!MenuMusic.Playing)
-            {
-                MenuMusic.Play();
-            }
-
             if (MenuMusic.StreamPaused)
             {
                 MenuMusic.StreamPaused = false;
             }
+            else if (!MenuMusic.Playing)
+            {
+                MenuMusic.Play();
+            }
+
+            JukeboxPanel.Instance?.ShowMenuTheme();
         }
-        else if (MenuMusic.Playing)
+        else if (MenuMusic.Playing || MenuMusic.StreamPaused)
         {
             MenuMusic.Stop();
+            MenuMusic.StreamPaused = false;
+
+            if (Map == null)
+            {
+                JukeboxPanel.Instance?.ClearMap();
+            }
         }
     }
 
