@@ -89,6 +89,9 @@ public partial class LegacyRunner : BaseScene
     private double lastFrame = Time.GetTicksUsec();     // delta arg unreliable..
                                                         //private double lastSecond = Time.GetTicksUsec();    // better framerate calculation
     private List<Dictionary<string, object>> lastCursorPositions = [];  // trail
+    private Vector2 previousSmartTrailPosition;
+    private float previousSmartTrailRotation;
+    private bool smartTrailInitialized = false;
                                                                         //private int frameCount = 0;
     private float skipLabelAlpha = 0;
     private float targetSkipLabelAlpha = 0;
@@ -510,6 +513,7 @@ public partial class LegacyRunner : BaseScene
         videoQuad = holder.GetNode<MeshInstance3D>("Video");
         notesMultimesh = holder.GetNode<MultiMeshInstance3D>("Notes");
         cursorTrailMultimesh = holder.GetNode<MultiMeshInstance3D>("CursorTrail");
+        ResetCursorTrailState();
         //jesus = GetNode<TextureRect>("Jesus");
 
         healthPanel = holder.GetNode("Health");
@@ -1156,53 +1160,151 @@ public partial class LegacyRunner : BaseScene
         // trail stuff
         if (settings.CursorTrail)
         {
-            List<Dictionary<string, object>> culledList = [];
-
-            lastCursorPositions.Add(new()
+            if (settings.SmartCursorTrail)
             {
-                ["Time"] = now,
-                ["Position"] = CurrentAttempt.CursorPosition,
-                ["Rotation"] = cursor.Rotation.Z
-            });
+                AddSmartCursorTrailSamples(now, delta);
+            }
+            else
+            {
+                AddCursorTrailSample(now);
+            }
+
+            ulong trailLifetimeUs = (ulong)Math.Max(1, settings.TrailTime * 1_000_000f);
+            lastCursorPositions.RemoveAll(entry => now - (ulong)entry["Time"] >= trailLifetimeUs);
+
+            MultiMesh trailMultimesh = cursorTrailMultimesh.Multimesh;
+            int count = lastCursorPositions.Count;
+            float size = (float)(Constants.CURSOR_SIZE * settings.CursorScale.Value);
+            int j = 0;
+
+            if (count > trailMultimesh.InstanceCount)
+            {
+                trailMultimesh.InstanceCount = count;
+            }
 
             foreach (Dictionary<string, object> entry in lastCursorPositions)
             {
-                if (now - (ulong)entry["Time"] >= (settings.TrailTime * 1000000))
-                {
-                    continue;
-                }
-
-                if (CurrentAttempt.CursorPosition.DistanceTo((Vector2)entry["Position"]) == 0)
-                {
-                    continue;
-                }
-
-                culledList.Add(entry);
-            }
-
-            int count = culledList.Count;
-            float size = ((Vector2)cursor.Mesh.Get("size")).X;
-            Transform3D transform = new Transform3D(new Vector3(size, 0, 0), new Vector3(0, size, 0), new Vector3(0, 0, size), Vector3.Zero);
-            int j = 0;
-
-            cursorTrailMultimesh.Multimesh.InstanceCount = count;
-
-            foreach (Dictionary<string, object> entry in culledList)
-            {
                 ulong difference = now - (ulong)entry["Time"];
-                uint alpha = (uint)(difference / (settings.TrailTime * 1000000) * 255);
+                Vector2 entryPosition = (Vector2)entry["Position"];
 
-                transform.Origin = new Vector3(((Vector2)entry["Position"]).X, ((Vector2)entry["Position"]).Y, 0);
+                float ageRatio = Mathf.Clamp((float)difference / trailLifetimeUs, 0, 1);
+                float scaleRatio = count > 0 ? (j + 1f) / count : 1f;
+                float particleSize = settings.TrailModeScale ? size * scaleRatio : size;
+
+                Transform3D transform = new Transform3D(
+                    new Vector3(particleSize, 0, 0),
+                    new Vector3(0, particleSize, 0),
+                    new Vector3(0, 0, particleSize),
+                    new Vector3(entryPosition.X, entryPosition.Y, 0)
+                );
+
                 transform = transform.RotatedLocal(Vector3.Back, (float)entry["Rotation"]);
-
-                cursorTrailMultimesh.Multimesh.SetInstanceTransform(j, transform);
-                cursorTrailMultimesh.Multimesh.SetInstanceColor(j, Color.FromHtml($"ffffff{255 - alpha:X2}"));
+                trailMultimesh.SetInstanceTransform(j, transform);
+                trailMultimesh.SetInstanceColor(j, Color.Color8(255, 255, 255, (byte)(255 * (1f - ageRatio))));
                 j++;
             }
+
+            trailMultimesh.VisibleInstanceCount = j;
         }
         else
         {
-            cursorTrailMultimesh.Multimesh.InstanceCount = 0;
+            lastCursorPositions.Clear();
+            smartTrailInitialized = false;
+            cursorTrailMultimesh.Multimesh.VisibleInstanceCount = 0;
+        }
+    }
+
+    private void AddCursorTrailSample(ulong now)
+    {
+        if (lastCursorPositions.Count > 0)
+        {
+            Vector2 lastPosition = (Vector2)lastCursorPositions[^1]["Position"];
+
+            if (lastPosition == CurrentAttempt.CursorPosition)
+            {
+                return;
+            }
+        }
+
+        lastCursorPositions.Add(new()
+        {
+            ["Time"] = now,
+            ["Position"] = CurrentAttempt.CursorPosition,
+            ["Rotation"] = cursor.Rotation.Z
+        });
+    }
+
+    private void AddSmartCursorTrailSamples(ulong now, double delta)
+    {
+        if (delta <= 0 || double.IsNaN(delta) || double.IsInfinity(delta))
+        {
+            return;
+        }
+
+        Vector2 currentPosition = CurrentAttempt.CursorPosition;
+        float currentRotation = cursor.Rotation.Z;
+
+        if (!smartTrailInitialized)
+        {
+            previousSmartTrailPosition = currentPosition;
+            previousSmartTrailRotation = currentRotation;
+            smartTrailInitialized = true;
+            lastCursorPositions.Add(new()
+            {
+                ["Time"] = now,
+                ["Position"] = currentPosition,
+                ["Rotation"] = currentRotation
+            });
+            return;
+        }
+
+        Vector2 startPosition = currentPosition;
+        Vector2 endPosition = previousSmartTrailPosition;
+        float startRotation = currentRotation;
+        float endRotation = previousSmartTrailRotation;
+
+        float positionDiff = (startPosition - endPosition).Length();
+        float rotationDiffDegrees = Mathf.Abs(Mathf.RadToDeg(Mathf.Wrap(startRotation - endRotation, -Mathf.Pi, Mathf.Pi)));
+        float rotationDiff = Mathf.Pi * (float)settings.CursorScale.Value * rotationDiffDegrees / 360f;
+        float diff = Math.Max(positionDiff, rotationDiff);
+        int amount = Math.Min((int)Math.Ceiling(settings.TrailDetail * diff), 120);
+
+        if (amount <= 0)
+        {
+            previousSmartTrailPosition = currentPosition;
+            previousSmartTrailRotation = currentRotation;
+            return;
+        }
+
+        double deltaUs = delta * 1_000_000d;
+
+        for (int i = amount - 1; i >= 0; i--)
+        {
+            float lerpAmount = i / (float)amount;
+            Vector2 samplePosition = startPosition.Lerp(endPosition, lerpAmount);
+            float sampleRotation = Mathf.LerpAngle(startRotation, endRotation, lerpAmount);
+            ulong sampleTime = (ulong)Math.Clamp(now - (deltaUs * lerpAmount), 0, now);
+
+            lastCursorPositions.Add(new()
+            {
+                ["Time"] = sampleTime,
+                ["Position"] = samplePosition,
+                ["Rotation"] = sampleRotation
+            });
+        }
+
+        previousSmartTrailPosition = currentPosition;
+        previousSmartTrailRotation = currentRotation;
+    }
+
+    private void ResetCursorTrailState()
+    {
+        lastCursorPositions.Clear();
+        smartTrailInitialized = false;
+
+        if (cursorTrailMultimesh?.Multimesh != null)
+        {
+            cursorTrailMultimesh.Multimesh.VisibleInstanceCount = 0;
         }
     }
 

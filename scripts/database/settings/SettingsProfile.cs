@@ -174,6 +174,18 @@ public partial class SettingsProfile
     public SettingsItem<float> TrailDetail { get; private set; }
 
     /// <summary>
+    /// Updates trail particles only when the cursor moves
+    /// </summary>
+    [Order]
+    public SettingsItem<bool> SmartCursorTrail { get; private set; }
+
+    /// <summary>
+    /// Shrinks trail particles based on how long its been present
+    /// </summary>
+    [Order]
+    public SettingsItem<bool> TrailModeScale { get; private set; }
+
+    /// <summary>
     /// Uses the skin's cursor instead of the native cursor
     /// </summary>
     [Order]
@@ -684,14 +696,30 @@ public partial class SettingsProfile
         {
             Id = "TrailDetail",
             Title = "Trail Detail",
-            Description = "(Not implemented) Adjusts the detail for the trail",
+            Description = "Adjusts the detail for the trail",
             Section = SettingsSection.Visual,
             Slider = new()
             {
                 Step = 0.05f,
                 MinValue = 0,
-                MaxValue = 5
+                MaxValue = 100
             }
+        };
+
+        SmartCursorTrail = new(false)
+        {
+            Id = "SmartCursorTrail",
+            Title = "Smart Cursor Trail",
+            Description = "Updates trail particles only when the cursor moves",
+            Section = SettingsSection.Visual
+        };
+
+        TrailModeScale = new(false)
+        {
+            Id = "TrailModeScale",
+            Title = "Cursor Trail Scale",
+            Description = "Scales trail particles over lifetime using cursor scale",
+            Section = SettingsSection.Visual
         };
 
         UseCursorInMenus = new(false)
