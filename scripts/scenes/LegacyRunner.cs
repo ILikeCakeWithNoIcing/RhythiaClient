@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
@@ -89,6 +89,9 @@ public partial class LegacyRunner : BaseScene
     private double lastFrame = Time.GetTicksUsec();     // delta arg unreliable..
                                                         //private double lastSecond = Time.GetTicksUsec();    // better framerate calculation
     private List<Dictionary<string, object>> lastCursorPositions = [];  // trail
+    private Vector2 previousSmartTrailPosition;
+    private float previousSmartTrailRotation;
+    private bool smartTrailInitialized = false;
                                                                         //private int frameCount = 0;
     private float skipLabelAlpha = 0;
     private float targetSkipLabelAlpha = 0;
@@ -510,6 +513,7 @@ public partial class LegacyRunner : BaseScene
         videoQuad = holder.GetNode<MeshInstance3D>("Video");
         notesMultimesh = holder.GetNode<MultiMeshInstance3D>("Notes");
         cursorTrailMultimesh = holder.GetNode<MultiMeshInstance3D>("CursorTrail");
+        resetCursorTrailState();
         //jesus = GetNode<TextureRect>("Jesus");
 
         healthPanel = holder.GetNode("Health");
@@ -584,7 +588,7 @@ public partial class LegacyRunner : BaseScene
         menuButtonsHolder.GetNode<Button>("Restart").Pressed += Restart;
         menuButtonsHolder.GetNode<Button>("Settings").Pressed += () =>
         {
-            SettingsMenu.Instance.ShowMenu();
+            SettingsManager.ShowMenu();
         };
         menuButtonsHolder.GetNode<Button>("Quit").Pressed += () =>
         {
@@ -611,11 +615,11 @@ public partial class LegacyRunner : BaseScene
             replayViewerPause.TextureNormal = GD.Load<Texture2D>(Playing ? "res://textures/pause.png" : "res://textures/play.png");
         };
 
-        replayViewerSeek.ValueChanged += value =>
+        replayViewerSeek.ValueChanged += (double value) =>
         {
             replayViewerLabel.Text = $"{Util.String.FormatTime(value * CurrentAttempt.LongestReplayLength / 1000)} / {Util.String.FormatTime(CurrentAttempt.LongestReplayLength / 1000)}";
         };
-        replayViewerSeek.DragEnded += _ =>
+        replayViewerSeek.DragEnded += (bool _) =>
         {
             CurrentAttempt.Hits = 0;
             CurrentAttempt.Misses = 0;
@@ -752,13 +756,19 @@ public partial class LegacyRunner : BaseScene
 
         try
         {
-            StandardMaterial3D cursorMaterial = cursor.MaterialOverride as StandardMaterial3D ?? cursor.GetActiveMaterial(0) as StandardMaterial3D;
-            float cursorOpacity = Math.Clamp((float)settings.CursorOpacity.Value / 100, 0, 1);
-            float cursorTransparency = 1f - cursorOpacity;
+                StandardMaterial3D cursorMaterial = cursor.MaterialOverride as StandardMaterial3D ?? cursor.GetActiveMaterial(0) as StandardMaterial3D;
+                float cursorOpacity = Math.Min(Math.Clamp(settings.CursorOpacity.Value / 100f, 0, 1), 0.998f);
+                float cursorTransparency = 1f - cursorOpacity;
+
+                cursor.Transparency = cursorTransparency;
+
+                if (cursorMaterial != null)
+                {
+                    cursorMaterial.AlbedoTexture = SkinManager.Instance.Skin.CursorImage;
+                    cursorMaterial.Transparency = cursorOpacity < 1 ? BaseMaterial3D.TransparencyEnum.Alpha : BaseMaterial3D.TransparencyEnum.Disabled;
+                }
 
             cursor.Transparency = cursorTransparency;
-            cursorMaterial?.AlbedoTexture = SkinManager.Instance.Skin.CursorImage;
-
             (cursorTrailMultimesh.MaterialOverride as StandardMaterial3D).AlbedoTexture = SkinManager.Instance.Skin.CursorImage;
             (grid.GetActiveMaterial(0) as StandardMaterial3D).AlbedoTexture = SkinManager.Instance.Skin.GridImage;
             panelLeft.GetNode<TextureRect>("Background").Texture = SkinManager.Instance.Skin.PanelLeftBackgroundImage;
@@ -788,7 +798,6 @@ public partial class LegacyRunner : BaseScene
         {
             SoundManager.Song.Stream = Util.Audio.LoadStream(CurrentAttempt.Map.AudioBuffer);
             SoundManager.Song.PitchScale = (float)CurrentAttempt.Speed;
-            SoundManager.Song.VolumeDb = getTargetMusicVolumeDb();
             SoundManager.Song.Stop();
         }
 
@@ -872,7 +881,15 @@ public partial class LegacyRunner : BaseScene
         lastFrame = now;
         pauseCooldown = Math.Max(0, pauseCooldown - (float)delta);
         updatePauseHudVisualState();
+        //frameCount++;
         skipLabelAlpha = Mathf.Lerp(skipLabelAlpha, targetSkipLabelAlpha, Math.Min(1, (float)delta * 20));
+
+        //if (lastSecond + 1000000 <= now)
+        //{
+        //    fpsCounter.Text = $"{frameCount} FPS";
+        //    frameCount = 0;
+        //    lastSecond += 1000000;
+        //}
 
         if (rKeyHeld && !CurrentAttempt.IsReplay)
         {
@@ -926,19 +943,6 @@ public partial class LegacyRunner : BaseScene
         if (isPauseRampActive())
         {
             updatePauseStateEachFrame(delta);
-        }
-        else
-        {
-            double audioDelay = CurrentAttempt.Progress - 1000 * (SoundManager.Song.GetPlaybackPosition() + AudioServer.GetTimeSinceLastMix());
-
-            if (Math.Abs(audioDelay) > 25 && CurrentAttempt.Progress > 0)
-            {
-                SoundManager.Song.PitchScale = Math.Max(Mathf.Epsilon, (float)CurrentAttempt.Speed + (float)audioDelay / 1000);
-            }
-            else if (Math.Abs(SoundManager.Song.PitchScale - CurrentAttempt.Speed) > Mathf.Epsilon)
-            {
-                SoundManager.Song.PitchScale = (float)CurrentAttempt.Speed;
-            }
         }
 
         if (!Playing || MenuShown)
@@ -1041,6 +1045,7 @@ public partial class LegacyRunner : BaseScene
         CurrentAttempt.Skippable = false;
 
         startGameplayMediaAtExpected(isPauseRampActive() ? SoundManager.Song.VolumeDb : getTargetMusicVolumeDb());
+        correctAudioDesync();
 
         int nextNoteMillisecond = CurrentAttempt.PassedNotes >= CurrentAttempt.Map.Notes.Length ? (int)MapLength + 5000 : CurrentAttempt.Map.Notes[CurrentAttempt.PassedNotes].Millisecond;
         int lastNoteMillisecond = CurrentAttempt.PassedNotes > 0 ? CurrentAttempt.Map.Notes[CurrentAttempt.PassedNotes - 1].Millisecond : 0;
@@ -1148,67 +1153,158 @@ public partial class LegacyRunner : BaseScene
 
         progressLabel.Text = $"{Util.String.FormatTime(Math.Max(0, CurrentAttempt.Progress) / 1000)} / {Util.String.FormatTime(MapLength / 1000)}";
         healthTexture.Size = healthTexture.Size.Lerp(new Vector2(32 + (float)CurrentAttempt.Health * 10.24f, 80), Math.Min(1, (float)delta * 64));
-
-        Vector2 progressSize = new Vector2(32 + (float)(CurrentAttempt.Progress / MapLength) * 1024, 80);
-
-        if ((int)progressSize.X != (int)progressBarTexture.Size.X)
-        {
-            progressBarTexture.Size = progressSize;
-        }
-
+        progressBarTexture.Size = new Vector2(32 + (float)(CurrentAttempt.Progress / MapLength) * 1024, 80);
         skipLabel.Modulate = Color.Color8(255, 255, 255, (byte)(skipLabelAlpha * 255));
-        cursor.RotationDegrees += Vector3.Back * (float)settings.CursorRotation * (float)delta;
+        cursor.RotationDegrees += Vector3.Back * settings.CursorRotation * (float)delta;
 
         // trail stuff
         if (settings.CursorTrail)
         {
-            List<Dictionary<string, object>> culledList = [];
-
-            lastCursorPositions.Add(new()
+            if (settings.SmartCursorTrail)
             {
-                ["Time"] = now,
-                ["Position"] = CurrentAttempt.CursorPosition,
-                ["Rotation"] = cursor.Rotation.Z
-            });
+                addSmartCursorTrailSamples(now, delta);
+            }
+            else
+            {
+                addCursorTrailSample(now);
+            }
+
+            ulong trailLifetimeUs = (ulong)Math.Max(1, settings.TrailTime * 1_000_000f);
+            lastCursorPositions.RemoveAll(entry => now - (ulong)entry["Time"] >= trailLifetimeUs);
+
+            MultiMesh trailMultimesh = cursorTrailMultimesh.Multimesh;
+            int count = lastCursorPositions.Count;
+            float size = (float)(Constants.CURSOR_SIZE * settings.CursorScale.Value);
+            int j = 0;
+
+            if (count > trailMultimesh.InstanceCount)
+            {
+                trailMultimesh.InstanceCount = count;
+            }
 
             foreach (Dictionary<string, object> entry in lastCursorPositions)
             {
-                if (now - (ulong)entry["Time"] >= (settings.TrailTime * 1000000))
-                {
-                    continue;
-                }
-
-                if (CurrentAttempt.CursorPosition.DistanceTo((Vector2)entry["Position"]) == 0)
-                {
-                    continue;
-                }
-
-                culledList.Add(entry);
-            }
-
-            int count = culledList.Count;
-            float size = ((Vector2)cursor.Mesh.Get("size")).X;
-            Transform3D transform = new Transform3D(new Vector3(size, 0, 0), new Vector3(0, size, 0), new Vector3(0, 0, size), Vector3.Zero);
-            int j = 0;
-
-            cursorTrailMultimesh.Multimesh.InstanceCount = count;
-
-            foreach (Dictionary<string, object> entry in culledList)
-            {
                 ulong difference = now - (ulong)entry["Time"];
-                uint alpha = (uint)(difference / (settings.TrailTime * 1000000) * 255);
+                Vector2 entryPosition = (Vector2)entry["Position"];
 
-                transform.Origin = new Vector3(((Vector2)entry["Position"]).X, ((Vector2)entry["Position"]).Y, 0);
+                float ageRatio = Mathf.Clamp((float)difference / trailLifetimeUs, 0, 1);
+                float scaleRatio = count > 0 ? (j + 1f) / count : 1f;
+                float particleSize = settings.TrailModeScale ? size * scaleRatio : size;
+
+                Transform3D transform = new Transform3D(
+                    new Vector3(particleSize, 0, 0),
+                    new Vector3(0, particleSize, 0),
+                    new Vector3(0, 0, particleSize),
+                    new Vector3(entryPosition.X, entryPosition.Y, 0)
+                );
+
                 transform = transform.RotatedLocal(Vector3.Back, (float)entry["Rotation"]);
-
-                cursorTrailMultimesh.Multimesh.SetInstanceTransform(j, transform);
-                cursorTrailMultimesh.Multimesh.SetInstanceColor(j, Color.FromHtml($"ffffff{255 - alpha:X2}"));
+                trailMultimesh.SetInstanceTransform(j, transform);
+                trailMultimesh.SetInstanceColor(j, Color.Color8(255, 255, 255, (byte)(255 * (1f - ageRatio))));
                 j++;
             }
+
+            trailMultimesh.VisibleInstanceCount = j;
         }
         else
         {
-            cursorTrailMultimesh.Multimesh.InstanceCount = 0;
+            lastCursorPositions.Clear();
+            smartTrailInitialized = false;
+            cursorTrailMultimesh.Multimesh.VisibleInstanceCount = 0;
+        }
+    }
+
+    private void addCursorTrailSample(ulong now)
+    {
+        if (lastCursorPositions.Count > 0)
+        {
+            Vector2 lastPosition = (Vector2)lastCursorPositions[^1]["Position"];
+
+            if (lastPosition == CurrentAttempt.CursorPosition)
+            {
+                return;
+            }
+        }
+
+        lastCursorPositions.Add(new()
+        {
+            ["Time"] = now,
+            ["Position"] = CurrentAttempt.CursorPosition,
+            ["Rotation"] = cursor.Rotation.Z
+        });
+    }
+
+    private void addSmartCursorTrailSamples(ulong now, double delta)
+    {
+        if (delta <= 0 || double.IsNaN(delta) || double.IsInfinity(delta))
+        {
+            return;
+        }
+
+        Vector2 currentPosition = CurrentAttempt.CursorPosition;
+        float currentRotation = cursor.Rotation.Z;
+
+        if (!smartTrailInitialized)
+        {
+            previousSmartTrailPosition = currentPosition;
+            previousSmartTrailRotation = currentRotation;
+            smartTrailInitialized = true;
+            lastCursorPositions.Add(new()
+            {
+                ["Time"] = now,
+                ["Position"] = currentPosition,
+                ["Rotation"] = currentRotation
+            });
+            return;
+        }
+
+        Vector2 startPosition = currentPosition;
+        Vector2 endPosition = previousSmartTrailPosition;
+        float startRotation = currentRotation;
+        float endRotation = previousSmartTrailRotation;
+
+        float positionDiff = (startPosition - endPosition).Length();
+        float rotationDiffDegrees = Mathf.Abs(Mathf.RadToDeg(Mathf.Wrap(startRotation - endRotation, -Mathf.Pi, Mathf.Pi)));
+        float rotationDiff = Mathf.Pi * (float)settings.CursorScale.Value * rotationDiffDegrees / 360f;
+        float diff = Math.Max(positionDiff, rotationDiff);
+        int amount = Math.Min((int)Math.Ceiling(settings.TrailDetail * diff), 120);
+
+        if (amount <= 0)
+        {
+            previousSmartTrailPosition = currentPosition;
+            previousSmartTrailRotation = currentRotation;
+            return;
+        }
+
+        double deltaUs = delta * 1_000_000d;
+
+        for (int i = amount - 1; i >= 0; i--)
+        {
+            float lerpAmount = i / (float)amount;
+            Vector2 samplePosition = startPosition.Lerp(endPosition, lerpAmount);
+            float sampleRotation = Mathf.LerpAngle(startRotation, endRotation, lerpAmount);
+            ulong sampleTime = (ulong)Math.Clamp(now - (deltaUs * lerpAmount), 0, now);
+
+            lastCursorPositions.Add(new()
+            {
+                ["Time"] = sampleTime,
+                ["Position"] = samplePosition,
+                ["Rotation"] = sampleRotation
+            });
+        }
+
+        previousSmartTrailPosition = currentPosition;
+        previousSmartTrailRotation = currentRotation;
+    }
+
+    private void resetCursorTrailState()
+    {
+        lastCursorPositions.Clear();
+        smartTrailInitialized = false;
+
+        if (cursorTrailMultimesh?.Multimesh != null)
+        {
+            cursorTrailMultimesh.Multimesh.VisibleInstanceCount = 0;
         }
     }
 
@@ -1216,7 +1312,7 @@ public partial class LegacyRunner : BaseScene
     {
         if (CurrentAttempt.Stopped) return;
 
-        if (@event is InputEventMouseMotion eventMouseMotion && !MenuShown && (Playing || isPaused() || isPauseRampActive()) && !CurrentAttempt.IsReplay)
+        if (@event is InputEventMouseMotion eventMouseMotion && (Playing || isPaused() || isPauseRampActive()) && !CurrentAttempt.IsReplay)
         {
             if (!settings.AbsoluteInput)
             {
@@ -1288,11 +1384,14 @@ public partial class LegacyRunner : BaseScene
                 {
                     case Key.Escape:
                         CurrentAttempt.Qualifies = false;
-
-                        if (SettingsMenu.Instance.Shown)
+                            if (SettingsManager.Shown)
                         {
-                            SettingsMenu.Instance.HideMenu();
+                            SettingsManager.HideMenu();
                         }
+                            else if (isPaused() || isPauseRampActive())
+                            {
+                                break;
+                            }
                         else
                         {
                             ShowMenu(!MenuShown);
@@ -1323,7 +1422,7 @@ public partial class LegacyRunner : BaseScene
                         }
                         break;
                     case Key.F:
-                        settings.FadeOut.Value = settings.FadeOut.Value > 0 ? 0 : 100;
+                        settings.FadeOut.Value = settings.FadeOut.Value > 0 ? 0 : 5;
                         break;
                     case Key.P:
                         settings.Pushback.Value = !settings.Pushback;
@@ -1490,6 +1589,8 @@ public partial class LegacyRunner : BaseScene
             }
         }
 
+        DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Adaptive);
+
         if (results)
         {
             SceneManager.Load("res://scenes/results.tscn");
@@ -1502,7 +1603,7 @@ public partial class LegacyRunner : BaseScene
 
     private static float getTargetMusicVolumeDb()
     {
-        return SoundManager.ComputeVolumeDb((float)settings.VolumeMusic.Value, (float)settings.VolumeMaster.Value, 70);
+        return SoundManager.ComputeVolumeDb(settings.VolumeMusic.Value, settings.VolumeMaster.Value, 70);
     }
 
     private static double getExpectedAudioTimeMs(bool includeLocalOffset = true)
@@ -1532,6 +1633,7 @@ public partial class LegacyRunner : BaseScene
 
         if (CurrentAttempt.Map.AudioBuffer != null && audioTime >= 0 && CurrentAttempt.Progress < MapLength)
         {
+            SoundManager.Song.PitchScale = (float)CurrentAttempt.Speed;
             SoundManager.Song.VolumeDb = targetVolumeDb;
 
             if (!musicStarted || !SoundManager.Song.Playing)
@@ -1550,7 +1652,7 @@ public partial class LegacyRunner : BaseScene
                 video.StreamPosition = (float)videoTime / 1000;
 
                 Tween videoInTween = videoQuad.CreateTween();
-                videoInTween.TweenProperty(videoQuad, "transparency", settings.VideoDim / 100, 0.5);
+                videoInTween.TweenProperty(videoQuad, "transparency", (float)settings.VideoDim / 100, 0.5);
                 videoInTween.Play();
             }
         }
@@ -1590,6 +1692,7 @@ public partial class LegacyRunner : BaseScene
         pauseHudControl.SetProgress(0);
         updatePauseHudVisualState();
         startGameplayMediaAtExpected(pauseRampStartDb, false);
+        correctAudioDesync(true);
         Playing = true;
     }
 
@@ -1617,7 +1720,8 @@ public partial class LegacyRunner : BaseScene
         pauseHoldTime = 0;
         pauseCooldown = pauseCooldownDuration;
         pauseHudControl.SetProgress(1);
-        SoundManager.Song.VolumeDb = getTargetMusicVolumeDb();
+        SoundManager.Song.VolumeDb = 0f;
+        correctAudioDesync(true);
         Playing = true;
         updatePauseHudVisualState();
     }
@@ -1638,15 +1742,40 @@ public partial class LegacyRunner : BaseScene
         pauseHoldTime += (float)delta;
         pauseState = Math.Max(0, pauseState - (float)(delta / pauseHoldDuration));
         pauseHudControl.SetProgress(Math.Clamp(1f - pauseState, 0f, 1f));
-
         if (CurrentAttempt.Map.AudioBuffer != null && musicStarted && SoundManager.Song.Playing)
         {
-            SoundManager.Song.VolumeDb = Mathf.Lerp(getTargetMusicVolumeDb() - 60, getTargetMusicVolumeDb(), 1 - pauseState);
+            SoundManager.Song.VolumeDb = Math.Min(SoundManager.Song.VolumeDb + (float)delta * pauseRampRateDbPerSecond, 0f);
         }
 
         if (pauseState == 0)
         {
             completeUnpause();
+        }
+    }
+
+    private static void correctAudioDesync(bool force = false)
+    {
+        double expectedMs = Math.Max(0, getExpectedAudioTimeMs());
+        double thresholdMs = pauseDesyncThresholdMs * Math.Max(CurrentAttempt.Speed, 1.0);
+
+        if (CurrentAttempt.Map.AudioBuffer != null && musicStarted && SoundManager.Song.Playing)
+        {
+            double actualMs = SoundManager.Song.GetPlaybackPosition() * 1000;
+
+            if (force || Math.Abs(actualMs - expectedMs) > thresholdMs)
+            {
+                SoundManager.Song.Seek((float)expectedMs / 1000);
+            }
+        }
+
+        if (CurrentAttempt.Map.VideoBuffer != null && video.IsPlaying())
+        {
+            double actualVideoMs = video.StreamPosition * 1000;
+
+            if (force || Math.Abs(actualVideoMs - expectedMs) > thresholdMs)
+            {
+                video.StreamPosition = (float)expectedMs / 1000;
+            }
         }
     }
 
@@ -1731,20 +1860,22 @@ public partial class LegacyRunner : BaseScene
 
     public static void ShowMenu(bool show = true)
     {
-        if (isPauseRampActive())
+        if (isPaused() || isPauseRampActive())
         {
             return;
         }
 
         MenuShown = show;
+        Playing = !MenuShown && !isPaused();
 
         if (MenuShown)
         {
             stopGameplayMedia();
         }
-        else if (!isPaused())
+        else
         {
             startGameplayMediaAtExpected(getTargetMusicVolumeDb());
+            correctAudioDesync(true);
         }
 
         MenuCursor.Instance.UpdateVisible(MenuShown && SettingsManager.Instance.Settings.UseCursorInMenus.Value);
@@ -1828,7 +1959,7 @@ public partial class LegacyRunner : BaseScene
             // The pivot is to mimic ROBLOX's orbital camera
             Vector3 Pivot = Camera.Basis.Z / 4f;
 
-            Camera.Position = Origin + CursorLock * (float)settings.CameraParallax + Pivot;
+            Camera.Position = Origin + CursorLock * settings.CameraParallax + Pivot;
 
             Vector3 LookVector = Camera.Basis.Z;
             Vector2 CameraVec2 = new Vector2(Camera.Position.X, Camera.Position.Y);
