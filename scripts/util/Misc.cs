@@ -17,6 +17,9 @@ public class Misc
             case "NoFail":
                 tex = skin.ModNoFailImage;
                 break;
+            case "Autoplay":
+                tex = GD.Load<Texture2D>("res://textures/ui/autoplay.png");
+                break;
             case "Ghost":
                 tex = skin.ModGhostImage;
                 break;

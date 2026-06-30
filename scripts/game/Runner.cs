@@ -24,9 +24,11 @@ public partial class Runner : Node3D
     public bool StopQueued = false;
 
     private SettingsProfile settings;
+    private AutoplayHandler autoplayHandler;
     private double lastFrame = Time.GetTicksUsec();
     private bool firstFrame = true;
     private bool eventsConnected = false;
+    private bool autoplayEnabled = false;
 
     [ExportCategory("Settings")]
     [Export] public bool NotesOnly = false;
@@ -79,6 +81,11 @@ public partial class Runner : Node3D
         }
 
         // Save replay frame
+
+        if (autoplayEnabled)
+        {
+            Game.Instance.CursorManager.UpdateAutoplayCursor(autoplayHandler.GetCursorPosition(Attempt.Progress));
+        }
 
         // if not paused & record replays on & not a temporary map & time from now and last replay frame was 60 frames apart
         if (!Attempt.Stopped && settings.RecordReplays && !Attempt.Map.Ephemeral && now - Attempt.LastReplayFrame >= 1000000 / 60)
@@ -240,6 +247,22 @@ public partial class Runner : Node3D
             }
         }
 
+        autoplayEnabled = Attempt.Modifiers.Any(mod => mod is AutoplayModifier) && !Attempt.IsReplay;
+
+        if (autoplayEnabled)
+        {
+            foreach (var mod in Attempt.Modifiers.Where(mod => mod is AutoplayModifier))
+            {
+                mod.Activate(Attempt);
+            }
+
+            autoplayHandler = new(Attempt);
+        }
+        else
+        {
+            autoplayHandler = null;
+        }
+
         foreach (var renderer in Renderers)
         {
             renderer.Setup(Attempt.Settings, SkinManager.Instance.Skin);
@@ -308,6 +331,7 @@ public partial class Runner : Node3D
     public void Seek(double ms)
     {
         Attempt.Progress = ms;
+        autoplayHandler?.Reset(Attempt.Progress);
 
         foreach (var entry in Attempt.Objects)
         {
