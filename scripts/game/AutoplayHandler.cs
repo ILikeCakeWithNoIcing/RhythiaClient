@@ -9,7 +9,7 @@ public class AutoplayHandler
     private readonly List<AutoNote> processedData = [];
     private int lastLoadedNote;
 
-    private const float MaxShiftMultiplier = 0.25f;
+    private const float max_shift_multiplier = 0.25f;
 
     private readonly struct AutoNote(float x, float y, double millisecond)
     {
@@ -77,7 +77,7 @@ public class AutoplayHandler
         AutoNote note2 = processedData[Math.Min(lastLoadedNote + 1, processedData.Count - 1)];
         AutoNote note3 = processedData[Math.Min(lastLoadedNote + 2, processedData.Count - 1)];
 
-        return GetSplinePosition(note0, note1, note2, note3, progress).Clamp(-Constants.BOUNDS, Constants.BOUNDS);
+        return getSplinePosition(note0, note1, note2, note3, progress).Clamp(-Constants.BOUNDS, Constants.BOUNDS);
     }
 
     private List<AutoNote> initialPreprocess(List<AutoNote> notes)
@@ -96,7 +96,7 @@ public class AutoplayHandler
             {
                 AutoNote next = notes[i];
 
-                if (Math.Abs(next.Millisecond - note.Millisecond) <= 5 && CheckHit(note, next, hitboxSize() * 0.9f))
+                if (Math.Abs(next.Millisecond - note.Millisecond) <= 5 && checkHit(note, next, hitboxSize() * 0.9f))
                 {
                     collected.Add(next);
                     i++;
@@ -125,7 +125,7 @@ public class AutoplayHandler
                 if (timeElapsed > 0)
                 {
                     float speed = prevDataPos.DistanceTo(avgPos) / (timeElapsed * 100);
-                    avgPos *= 0.8f + (Sigmoid(speed * 5) - 0.5f) * 2 * 0.2f;
+                    avgPos *= 0.8f + (sigmoid(speed * 5) - 0.5f) * 2 * 0.2f;
                 }
 
                 if (i > 2 && preprocessedData.Count >= 2)
@@ -174,7 +174,7 @@ public class AutoplayHandler
                 AutoNote nextNote = preprocessedData[i];
                 i++;
 
-                if (CheckHit(nextNote, topNote, 0.1f))
+                if (checkHit(nextNote, topNote, 0.1f))
                 {
                     stackLength++;
                 }
@@ -210,7 +210,7 @@ public class AutoplayHandler
                         {
                             float offsetCheck = Mathf.Lerp(5, (float)Constants.HIT_WINDOW * 0.8f, 1 - offsetTest / 9.0f);
 
-                            if (CheckHit(note, GetCursorPositionFromNotes(validation, note.Millisecond + offsetCheck), hitboxSize() * 0.74f))
+                            if (checkHit(note, getCursorPositionFromNotes(validation, note.Millisecond + offsetCheck), hitboxSize() * 0.74f))
                             {
                                 anyValid = true;
                                 break;
@@ -261,24 +261,24 @@ public class AutoplayHandler
     {
         List<AutoNote> tests = [];
         float testWidth = hitboxSize() * 0.5f;
-        const int testWidthFidelity = 3;
-        const int testCount = 11;
+        const int test_width_fidelity = 3;
+        const int test_count = 11;
 
-        for (int i = 0; i < testCount; i++)
+        for (int i = 0; i < test_count; i++)
         {
-            double millisecond = Mathf.Lerp(topNote.Millisecond, endNote.Millisecond, i / (testCount - 1.0f));
+            double millisecond = Mathf.Lerp(topNote.Millisecond, endNote.Millisecond, i / (test_count - 1.0f));
             tests.Add(new(topNote.X, topNote.Y, millisecond));
 
-            for (int x = -testWidthFidelity; x <= testWidthFidelity; x++)
+            for (int x = -test_width_fidelity; x <= test_width_fidelity; x++)
             {
-                for (int y = -testWidthFidelity; y <= testWidthFidelity; y++)
+                for (int y = -test_width_fidelity; y <= test_width_fidelity; y++)
                 {
                     if (x == 0 && y == 0)
                     {
                         continue;
                     }
 
-                    Vector2 offset = new Vector2(x, y) / testWidthFidelity * testWidth;
+                    Vector2 offset = new Vector2(x, y) / test_width_fidelity * testWidth;
                     tests.Add(new(topNote.X + offset.X, topNote.Y + offset.Y, millisecond));
                 }
             }
@@ -296,7 +296,7 @@ public class AutoplayHandler
 
     private void shiftPreprocess(List<AutoNote> originalNotes, List<AutoNote> preprocessedData, List<AutoNote> secondaryPreprocessedData)
     {
-        float maxRange = hitboxSize() * MaxShiftMultiplier;
+        float maxRange = hitboxSize() * max_shift_multiplier;
 
         for (int i = 0; i + 1 < secondaryPreprocessedData.Count; i++)
         {
@@ -317,7 +317,7 @@ public class AutoplayHandler
             }
             else
             {
-                Vector2 pos = GetSplinePosition(note0, note1, note3, note4, note2.Millisecond);
+                Vector2 pos = getSplinePosition(note0, note1, note3, note4, note2.Millisecond);
                 shiftVec = clampShift(pos - note2.Position, maxRange);
             }
 
@@ -348,8 +348,8 @@ public class AutoplayHandler
                 {
                     if (note.Millisecond >= low && note.Millisecond <= high)
                     {
-                        bool hit = CheckHit(note, GetCursorPositionFromNotes(validation, note.Millisecond + 1), hitboxSize() * 0.9f)
-                            || CheckHit(note, GetCursorPositionFromNotes(validation, note.Millisecond + 5), hitboxSize() * 0.9f);
+                        bool hit = checkHit(note, getCursorPositionFromNotes(validation, note.Millisecond + 1), hitboxSize() * 0.9f)
+                            || checkHit(note, getCursorPositionFromNotes(validation, note.Millisecond + 5), hitboxSize() * 0.9f);
 
                         if (!hit)
                         {
@@ -376,7 +376,7 @@ public class AutoplayHandler
         processedData.Add(preprocessedData[^1]);
     }
 
-    private Vector2 GetCursorPositionFromNotes(List<AutoNote> noteData, double elapsed)
+    private Vector2 getCursorPositionFromNotes(List<AutoNote> noteData, double elapsed)
     {
         if (noteData.Count == 0)
         {
@@ -402,18 +402,18 @@ public class AutoplayHandler
         AutoNote note2 = noteData[Math.Min(tempLastLoadedNote + 1, noteData.Count - 1)];
         AutoNote note3 = noteData[Math.Min(tempLastLoadedNote + 2, noteData.Count - 1)];
 
-        return GetSplinePosition(note0, note1, note2, note3, elapsed).Clamp(-Constants.BOUNDS, Constants.BOUNDS);
+        return getSplinePosition(note0, note1, note2, note3, elapsed).Clamp(-Constants.BOUNDS, Constants.BOUNDS);
     }
 
-    private static bool CheckHit(AutoNote notePos, AutoNote cursorPos, float size) => CheckHit(notePos, cursorPos.Position, size);
+    private static bool checkHit(AutoNote notePos, AutoNote cursorPos, float size) => checkHit(notePos, cursorPos.Position, size);
 
-    private static bool CheckHit(AutoNote notePos, Vector2 cursorPos, float size)
+    private static bool checkHit(AutoNote notePos, Vector2 cursorPos, float size)
     {
         Vector2 diff = (notePos.Position - cursorPos).Abs();
         return Math.Max(diff.X, diff.Y) < size;
     }
 
-    private static Vector2 GetSplinePosition(AutoNote note0, AutoNote note1, AutoNote note2, AutoNote note3, double time)
+    private static Vector2 getSplinePosition(AutoNote note0, AutoNote note1, AutoNote note2, AutoNote note3, double time)
     {
         double segmentDuration = note2.Millisecond - note1.Millisecond;
 
@@ -425,22 +425,22 @@ public class AutoplayHandler
         float u = (float)((time - note1.Millisecond) / segmentDuration);
 
         return new(
-            CatmullRomRaw(note0.X, note1.X, note2.X, note3.X, u, note0.Millisecond, note1.Millisecond, note2.Millisecond, note3.Millisecond),
-            CatmullRomRaw(note0.Y, note1.Y, note2.Y, note3.Y, u, note0.Millisecond, note1.Millisecond, note2.Millisecond, note3.Millisecond)
+            catmullRomRaw(note0.X, note1.X, note2.X, note3.X, u, note0.Millisecond, note1.Millisecond, note2.Millisecond, note3.Millisecond),
+            catmullRomRaw(note0.Y, note1.Y, note2.Y, note3.Y, u, note0.Millisecond, note1.Millisecond, note2.Millisecond, note3.Millisecond)
         );
     }
 
-    private static float CatmullRomRaw(float pos0, float pos1, float pos2, float pos3, float u, double time0, double time1, double time2, double time3)
+    private static float catmullRomRaw(float pos0, float pos1, float pos2, float pos3, float u, double time0, double time1, double time2, double time3)
     {
-        const float splineAlpha = 0.4f;
-        const float splineTension = -1f;
+        const float spline_alpha = 0.4f;
+        const float spline_tension = -1f;
 
-        float t01 = Mathf.Pow(Math.Max(Math.Abs((float)(time0 - time1)), 1), splineAlpha);
-        float t12 = Mathf.Pow(Math.Max(Math.Abs((float)(time1 - time2)), 1), splineAlpha);
-        float t23 = Mathf.Pow(Math.Max(Math.Abs((float)(time2 - time3)), 1), splineAlpha);
+        float t01 = Mathf.Pow(Math.Max(Math.Abs((float)(time0 - time1)), 1), spline_alpha);
+        float t12 = Mathf.Pow(Math.Max(Math.Abs((float)(time1 - time2)), 1), spline_alpha);
+        float t23 = Mathf.Pow(Math.Max(Math.Abs((float)(time2 - time3)), 1), spline_alpha);
 
-        float m1 = (1 - splineTension) * (pos2 - pos1 + t12 * ((pos1 - pos0) / t01 - (pos2 - pos0) / (t01 + t12)));
-        float m2 = (1 - splineTension) * (pos2 - pos1 + t12 * ((pos3 - pos2) / t23 - (pos3 - pos1) / (t12 + t23)));
+        float m1 = (1 - spline_tension) * (pos2 - pos1 + t12 * ((pos1 - pos0) / t01 - (pos2 - pos0) / (t01 + t12)));
+        float m2 = (1 - spline_tension) * (pos2 - pos1 + t12 * ((pos3 - pos2) / t23 - (pos3 - pos1) / (t12 + t23)));
 
         if (!float.IsFinite(m1))
         {
@@ -473,7 +473,7 @@ public class AutoplayHandler
         return shift;
     }
 
-    private static float Sigmoid(float value) => 1 / (1 + Mathf.Exp(-value));
+    private static float sigmoid(float value) => 1 / (1 + Mathf.Exp(-value));
 
     private static float hitboxSize() => (float)(0.5 + Constants.HIT_BOX_SIZE);
 }

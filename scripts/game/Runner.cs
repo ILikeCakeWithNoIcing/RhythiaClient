@@ -86,7 +86,7 @@ public partial class Runner : Node3D
         if (autoplayEnabled)
         {
             Game.Instance.CursorManager.UpdateAutoplayCursor(autoplayHandler.GetCursorPosition(Attempt.Progress));
-            ProcessAutoplayHits();
+            processAutoplayHits();
         }
 
         // if not paused & record replays on & not a temporary map & time from now and last replay frame was 60 frames apart
@@ -203,7 +203,7 @@ public partial class Runner : Node3D
         }
     }
 
-    private void ProcessAutoplayHits()
+    private void processAutoplayHits()
     {
         if (!autoplayEnabled || Attempt.IsReplay || !Attempt.Objects.TryGetValue(typeof(Note), out var objects))
         {
