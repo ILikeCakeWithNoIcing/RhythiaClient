@@ -29,6 +29,7 @@ public partial class Runner : Node3D
     private bool firstFrame = true;
     private bool eventsConnected = false;
     private bool autoplayEnabled = false;
+    private double? hitResultProgressOverride = null;
 
     [ExportCategory("Settings")]
     [Export] public bool NotesOnly = false;
@@ -85,6 +86,7 @@ public partial class Runner : Node3D
         if (autoplayEnabled)
         {
             Game.Instance.CursorManager.UpdateAutoplayCursor(autoplayHandler.GetCursorPosition(Attempt.Progress));
+            ProcessAutoplayHits();
         }
 
         // if not paused & record replays on & not a temporary map & time from now and last replay frame was 60 frames apart
@@ -198,6 +200,47 @@ public partial class Runner : Node3D
         foreach (var renderer in Renderers)
         {
             renderer.Process(delta, Attempt);
+        }
+    }
+
+    private void ProcessAutoplayHits()
+    {
+        if (!autoplayEnabled || Attempt.IsReplay || !Attempt.Objects.TryGetValue(typeof(Note), out var objects))
+        {
+            return;
+        }
+
+        // this can be used for difficulty calculation
+        int startIndex = ObjectIndicesStart[typeof(Note)];
+
+        for (int i = startIndex; i < objects.Count; i++)
+        {
+            if (objects[i] is not Note note)
+            {
+                continue;
+            }
+
+            if (note.Millisecond > Attempt.Progress)
+            {
+                break;
+            }
+
+            if (note.Millisecond < Attempt.StartFrom || note.LastResult != HitResult.None)
+            {
+                continue;
+            }
+
+            note.Hittable = true;
+
+            try
+            {
+                hitResultProgressOverride = note.Millisecond;
+                note.Hit(this);
+            }
+            finally
+            {
+                hitResultProgressOverride = null;
+            }
         }
     }
 
@@ -465,7 +508,8 @@ public partial class Runner : Node3D
 
     private void onHitResultChanged(int noteIndex, HitResult hitResult)
     {
-        float lateness = Attempt.IsReplay ? Attempt.HitsInfo[noteIndex] : (float)(((int)Attempt.Progress - Attempt.Map.Notes[noteIndex].Millisecond) / Speed);
+        double judgmentProgress = hitResultProgressOverride ?? Attempt.Progress;
+        float lateness = Attempt.IsReplay ? Attempt.HitsInfo[noteIndex] : (float)(((int)judgmentProgress - Attempt.Map.Notes[noteIndex].Millisecond) / Speed);
         float factor = 1 - Math.Max(0, lateness - 25) / 150f;
         uint hitScore = (uint)(100 * Attempt.ComboMultiplier * Attempt.ModsMultiplier * factor * ((Speed - 1) / 2.5 + 1));
 
