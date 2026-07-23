@@ -90,7 +90,7 @@ public partial class Runner : Node3D
         }
 
         // if not paused & record replays on & not a temporary map & time from now and last replay frame was 60 frames apart
-        if (!Attempt.Stopped && settings.RecordReplays && !Attempt.Map.Ephemeral && now - Attempt.LastReplayFrame >= 1000000 / 60)
+        if (!autoplayEnabled && !Attempt.Stopped && settings.RecordReplays && !Attempt.Map.Ephemeral && now - Attempt.LastReplayFrame >= 1000000 / 60)
         {
             if (Attempt.ReplayFrames.Count == 0 || (Attempt.ReplayFrames[^1][1..2] != new float[] { Attempt.CursorPosition.X, Attempt.CursorPosition.Y }))
             {
@@ -210,15 +210,11 @@ public partial class Runner : Node3D
             return;
         }
 
-        // this can be used for difficulty calculation
         int startIndex = ObjectIndicesStart[typeof(Note)];
 
         for (int i = startIndex; i < objects.Count; i++)
         {
-            if (objects[i] is not Note note)
-            {
-                continue;
-            }
+            Note note = (Note)objects[i];
 
             if (note.Millisecond > Attempt.Progress)
             {
@@ -447,7 +443,7 @@ public partial class Runner : Node3D
         }
 
         // dont want an infinite dependency loop so im just going to do this -fog
-        if (!Attempt.IsReplay && Game.Instance.ReplayManager.CurrentMode == ReplayManager.Mode.RECORD)
+        if (!autoplayEnabled && !Attempt.IsReplay && Game.Instance.ReplayManager.CurrentMode == ReplayManager.Mode.RECORD)
         {
             Game.Instance.ReplayManager.SaveReplay(Attempt);
         }

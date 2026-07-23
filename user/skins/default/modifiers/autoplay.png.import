@@ -10,7 +10,7 @@ metadata={
 
 [deps]
 
-source_file="res://textures/ui/autoplay.png"
+source_file="res://user/skins/default/modifiers/autoplay.png"
 dest_files=["res://.godot/imported/autoplay.png-68ce854bc9795d220ef473f6447c55d9.ctex"]
 
 [params]

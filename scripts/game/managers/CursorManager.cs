@@ -123,7 +123,7 @@ public partial class CursorManager : Node
         attempt.RawCursorPosition = position;
         attempt.CursorPosition = position.Clamp(-Constants.BOUNDS, Constants.BOUNDS);
 
-        var origin = new Vector3(0, 0, attempt.CameraMode.Name == "Spin" ? 3.5f : 3.75f);
+        var origin = new Vector3(0, 0, attempt.CameraMode.Name == "Spin" ? 4f : 3.75f);
         float parallax = (float)settings.CameraParallax;
         camera.Position = origin + new Vector3(attempt.CursorPosition.X, attempt.CursorPosition.Y, 0) * parallax;
 
