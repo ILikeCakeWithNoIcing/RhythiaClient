@@ -366,14 +366,15 @@ public class AutoplayHandler
         }
 
         List<AutoNote> merged = new(notes.Count);
-        for (int i = 0; i < notes.Count; )
+        int noteIndex = 0;
+        while (noteIndex < notes.Count)
         {
-            AutoNote first = notes[i++];
+            AutoNote first = notes[noteIndex++];
             Vector2 position = first.Position;
             int count = 1;
-            while (i < notes.Count && notes[i].Millisecond == first.Millisecond)
+            while (noteIndex < notes.Count && notes[noteIndex].Millisecond == first.Millisecond)
             {
-                position += notes[i++].Position;
+                position += notes[noteIndex++].Position;
                 count++;
             }
 

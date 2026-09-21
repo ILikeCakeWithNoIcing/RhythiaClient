@@ -544,7 +544,9 @@ public partial class Runner : Node3D
     private void onHitResultChanged(int noteIndex, HitResult hitResult)
     {
         double judgmentProgress = hitResultProgressOverride ?? Attempt.Progress;
-        float lateness = Attempt.IsReplay ? Attempt.HitsInfo[noteIndex] : (float)(((int)judgmentProgress - Attempt.Map.Notes[noteIndex].Millisecond) / Speed);
+        float lateness = Attempt.IsReplay
+            ? Attempt.HitsInfo[noteIndex]
+            : (float)(((int)judgmentProgress - Attempt.Map.Notes[noteIndex].Millisecond) / Speed);
         float factor = 1 - Math.Max(0, lateness - 25) / 150f;
         uint hitScore = (uint)(100 * Attempt.ComboMultiplier * Attempt.ModsMultiplier * factor * ((Speed - 1) / 2.5 + 1));
 
