@@ -1,15 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using Godot;
 
 public class AutoplayHandler
 {
-    private readonly Attempt attempt;
     private readonly List<AutoNote> processedData = [];
     private int lastLoadedNote;
 
     private const float max_shift_multiplier = 0.25f;
+    private const int cache_version = 1;
 
     private readonly struct AutoNote(float x, float y, double millisecond)
     {
@@ -20,19 +22,21 @@ public class AutoplayHandler
         public Vector2 Position => new(X, Y);
 
         public AutoNote WithPosition(Vector2 position) => new(position.X, position.Y, Millisecond);
-
-        public AutoNote WithMillisecond(double millisecond) => new(X, Y, millisecond);
     }
 
     public AutoplayHandler(Attempt attempt)
     {
-        this.attempt = attempt;
-
-        var notes = attempt.Map.Notes
-            .Select(note => new AutoNote(note.X, note.Y, note.Millisecond))
-            .ToList();
+        var notes = attempt.Map.Notes.Select(note => new AutoNote(note.X, note.Y, note.Millisecond)).ToList();
 
         if (notes.Count == 0)
+        {
+            return;
+        }
+
+        notes = mergeSimultaneousNotes(notes);
+
+        string cachePath = getCachePath(notes);
+        if (tryLoadCache(cachePath, notes.Count))
         {
             return;
         }
@@ -41,16 +45,13 @@ public class AutoplayHandler
         List<AutoNote> preprocessedData = initialPreprocess(notes);
         List<AutoNote> secondaryPreprocessedData = compressStacks(preprocessedData);
         shiftPreprocess(notes, preprocessedData, secondaryPreprocessedData);
+        saveCache(cachePath);
     }
 
     public void Reset(double progress)
     {
-        lastLoadedNote = 0;
-
-        while (lastLoadedNote + 1 < processedData.Count && processedData[lastLoadedNote + 1].Millisecond <= progress)
-        {
-            lastLoadedNote++;
-        }
+        int index = lowerBound(processedData, progress);
+        lastLoadedNote = index < processedData.Count && processedData[index].Millisecond == progress ? index : Math.Max(0, index - 1);
     }
 
     public Vector2 GetCursorPosition(double progress)
@@ -58,6 +59,11 @@ public class AutoplayHandler
         if (processedData.Count == 0)
         {
             return Vector2.Zero;
+        }
+
+        if (progress < processedData[lastLoadedNote].Millisecond)
+        {
+            Reset(progress);
         }
 
         while (lastLoadedNote + 1 < processedData.Count)
@@ -116,7 +122,7 @@ public class AutoplayHandler
 
             avgPos /= collected.Count;
 
-            if (i > 1)
+            if (preprocessedData.Count > 0)
             {
                 AutoNote prevData = preprocessedData[^1];
                 Vector2 prevDataPos = prevData.Position;
@@ -152,146 +158,22 @@ public class AutoplayHandler
         return preprocessedData;
     }
 
-    private List<AutoNote> compressStacks(List<AutoNote> preprocessedData)
+    private List<AutoNote> compressStacks(List<AutoNote> notes)
     {
-        if (preprocessedData.Count <= 5)
+        List<AutoNote> compressed = [];
+
+        for (int i = 0; i < notes.Count; i++)
         {
-            return [.. preprocessedData];
+            AutoNote note = notes[i];
+            if (i > 0 && i + 1 < notes.Count && notes[i - 1].Position == note.Position && notes[i + 1].Position == note.Position)
+            {
+                continue;
+            }
+
+            compressed.Add(note);
         }
 
-        List<AutoNote> secondaryPreprocessedData = [preprocessedData[0], preprocessedData[1]];
-        int i = 2;
-
-        while (i + 3 < preprocessedData.Count)
-        {
-            int stackLength = 1;
-            AutoNote topNote = preprocessedData[i];
-            int topNoteIndex = i;
-            i++;
-
-            while (i + 2 < preprocessedData.Count)
-            {
-                AutoNote nextNote = preprocessedData[i];
-                i++;
-
-                if (checkHit(nextNote, topNote, 0.1f))
-                {
-                    stackLength++;
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            i--;
-
-            if (stackLength > 1)
-            {
-                AutoNote endNote = preprocessedData[i - 1];
-                bool valid = false;
-                AutoNote validTest = topNote;
-                List<AutoNote> tests = buildStackTests(topNote, endNote);
-                int checkStart = Math.Max(0, topNoteIndex - 6);
-                List<AutoNote> notesToCheck = preprocessedData.GetRange(checkStart, Math.Min(i + 6, preprocessedData.Count) - checkStart);
-                List<AutoNote> cursorPositionNotes = secondaryPreprocessedData.GetRange(Math.Max(0, secondaryPreprocessedData.Count - stackLength - 12), Math.Min(stackLength + 12, secondaryPreprocessedData.Count));
-                List<AutoNote> cursorPositionNotesEnd = preprocessedData.GetRange(i, Math.Min(12, preprocessedData.Count - i));
-
-                foreach (AutoNote test in tests)
-                {
-                    bool currentValid = true;
-                    List<AutoNote> validation = [.. cursorPositionNotes, test, .. cursorPositionNotesEnd];
-
-                    foreach (AutoNote note in notesToCheck)
-                    {
-                        bool anyValid = false;
-
-                        for (int offsetTest = 0; offsetTest < 10; offsetTest++)
-                        {
-                            float offsetCheck = Mathf.Lerp(5, (float)Constants.HIT_WINDOW * 0.8f, 1 - offsetTest / 9.0f);
-
-                            if (checkHit(note, getCursorPositionFromNotes(validation, note.Millisecond + offsetCheck), hitboxSize() * 0.74f))
-                            {
-                                anyValid = true;
-                                break;
-                            }
-                        }
-
-                        if (!anyValid)
-                        {
-                            currentValid = false;
-                            break;
-                        }
-                    }
-
-                    if (currentValid)
-                    {
-                        valid = true;
-                        validTest = test;
-                        break;
-                    }
-                }
-
-                if (valid)
-                {
-                    secondaryPreprocessedData.Add(validTest);
-                }
-                else
-                {
-                    secondaryPreprocessedData.Add(topNote);
-                    secondaryPreprocessedData.Add(topNote.WithMillisecond(topNote.Millisecond + 10));
-                    secondaryPreprocessedData.Add(endNote.WithMillisecond(endNote.Millisecond - 10));
-                    secondaryPreprocessedData.Add(endNote);
-                }
-            }
-            else
-            {
-                secondaryPreprocessedData.Add(topNote);
-            }
-        }
-
-        secondaryPreprocessedData.Add(preprocessedData[^3]);
-        secondaryPreprocessedData.Add(preprocessedData[^2]);
-        secondaryPreprocessedData.Add(preprocessedData[^1]);
-
-        return secondaryPreprocessedData;
-    }
-
-    private List<AutoNote> buildStackTests(AutoNote topNote, AutoNote endNote)
-    {
-        List<AutoNote> tests = [];
-        float testWidth = hitboxSize() * 0.5f;
-        const int test_width_fidelity = 3;
-        const int test_count = 11;
-
-        for (int i = 0; i < test_count; i++)
-        {
-            double millisecond = Mathf.Lerp(topNote.Millisecond, endNote.Millisecond, i / (test_count - 1.0f));
-            tests.Add(new(topNote.X, topNote.Y, millisecond));
-
-            for (int x = -test_width_fidelity; x <= test_width_fidelity; x++)
-            {
-                for (int y = -test_width_fidelity; y <= test_width_fidelity; y++)
-                {
-                    if (x == 0 && y == 0)
-                    {
-                        continue;
-                    }
-
-                    Vector2 offset = new Vector2(x, y) / test_width_fidelity * testWidth;
-                    tests.Add(new(topNote.X + offset.X, topNote.Y + offset.Y, millisecond));
-                }
-            }
-        }
-
-        Vector2 topNotePos = topNote.Position;
-        tests.Sort((a, b) =>
-        {
-            int timeCompare = a.Millisecond.CompareTo(b.Millisecond);
-            return timeCompare != 0 ? timeCompare : a.Position.DistanceSquaredTo(topNotePos).CompareTo(b.Position.DistanceSquaredTo(topNotePos));
-        });
-
-        return tests;
+        return compressed;
     }
 
     private void shiftPreprocess(List<AutoNote> originalNotes, List<AutoNote> preprocessedData, List<AutoNote> secondaryPreprocessedData)
@@ -300,77 +182,44 @@ public class AutoplayHandler
 
         for (int i = 0; i + 1 < secondaryPreprocessedData.Count; i++)
         {
-            // this can be used for difficulty calculation
             AutoNote note0 = secondaryPreprocessedData[Math.Max(i - 2, 0)];
             AutoNote note1 = secondaryPreprocessedData[Math.Max(i - 1, 0)];
             AutoNote note2 = secondaryPreprocessedData[i];
             AutoNote note3 = secondaryPreprocessedData[i + 1];
             AutoNote note4 = secondaryPreprocessedData[Math.Min(i + 2, secondaryPreprocessedData.Count - 1)];
 
-            Vector2 shiftVec;
-
-            if (note2.X == note3.X && note2.Y == note3.Y)
-            {
-                Vector2 previous = processedData.Count > 0 ? processedData[^1].Position : note1.Position;
-                Vector2 desired = (previous + note2.Position * 0.5f + note3.Position) / 2.5f;
-                shiftVec = clampShift(desired - note2.Position, hitboxSize() * 0.75f);
-            }
-            else
-            {
-                Vector2 pos = getSplinePosition(note0, note1, note3, note4, note2.Millisecond);
-                shiftVec = clampShift(pos - note2.Position, maxRange);
-            }
-
-            bool valid = false;
-
-            for (int testIndex = 0; testIndex < 1; testIndex++)
-            {
-                float shiftMulti = (10 - testIndex) / 10.0f;
-                AutoNote newNote = note2.WithPosition(note2.Position + shiftVec * shiftMulti);
-                List<AutoNote> validation = [
-                    .. processedData.TakeLast(3),
-                    newNote,
-                    .. secondaryPreprocessedData.Skip(i + 1).Take(3)
-                ];
-
-                if (validation.Count < 4)
-                {
-                    processedData.Add(newNote);
-                    valid = true;
-                    break;
-                }
-
-                bool currentValid = true;
-                double low = validation[Math.Min(2, validation.Count - 1)].Millisecond;
-                double high = validation[Math.Max(0, validation.Count - 3)].Millisecond;
-
-                foreach (AutoNote note in originalNotes)
-                {
-                    if (note.Millisecond >= low && note.Millisecond <= high)
-                    {
-                        bool hit = checkHit(note, getCursorPositionFromNotes(validation, note.Millisecond + 1), hitboxSize() * 0.9f)
-                            || checkHit(note, getCursorPositionFromNotes(validation, note.Millisecond + 5), hitboxSize() * 0.9f);
-
-                        if (!hit)
-                        {
-                            currentValid = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (currentValid)
-                {
-                    processedData.Add(newNote);
-                    valid = true;
-                    break;
-                }
-            }
-
-            if (!valid)
+            if (note1.Position == note2.Position || note2.Position == note3.Position)
             {
                 processedData.Add(note2);
+                continue;
             }
+
+            Vector2 position = getSplinePosition(note0, note1, note3, note4, note2.Millisecond);
+            Vector2 shift = clampShift(position - note2.Position, maxRange);
+            AutoNote shifted = note2.WithPosition(note2.Position + shift);
+            List<AutoNote> validation = [.. processedData.TakeLast(3), shifted, .. secondaryPreprocessedData.Skip(i + 1).Take(3)];
+
+            bool valid = true;
+            double low = validation[Math.Min(2, validation.Count - 1)].Millisecond;
+            double high = validation[Math.Max(0, validation.Count - 3)].Millisecond;
+
+            for (int noteIndex = lowerBound(originalNotes, low); noteIndex < originalNotes.Count; noteIndex++)
+            {
+                AutoNote note = originalNotes[noteIndex];
+                if (note.Millisecond > high)
+                    break;
+
+                bool hit =
+                    checkHit(note, getCursorPositionFromNotes(validation, note.Millisecond + 1), hitboxSize() * 0.9f)
+                    || checkHit(note, getCursorPositionFromNotes(validation, note.Millisecond + 5), hitboxSize() * 0.9f);
+                if (!hit)
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            processedData.Add(valid ? shifted : note2);
         }
 
         processedData.Add(preprocessedData[^1]);
@@ -422,7 +271,12 @@ public class AutoplayHandler
             return note1.Position;
         }
 
-        float u = (float)((time - note1.Millisecond) / segmentDuration);
+        if (note1.Position == note2.Position)
+        {
+            return note1.Position;
+        }
+
+        float u = (float)Math.Clamp((time - note1.Millisecond) / segmentDuration, 0, 1);
 
         return new(
             catmullRomRaw(note0.X, note1.X, note2.X, note3.X, u, note0.Millisecond, note1.Millisecond, note2.Millisecond, note3.Millisecond),
@@ -430,7 +284,17 @@ public class AutoplayHandler
         );
     }
 
-    private static float catmullRomRaw(float pos0, float pos1, float pos2, float pos3, float u, double time0, double time1, double time2, double time3)
+    private static float catmullRomRaw(
+        float pos0,
+        float pos1,
+        float pos2,
+        float pos3,
+        float u,
+        double time0,
+        double time1,
+        double time2,
+        double time3
+    )
     {
         const float spline_alpha = 0.4f;
         const float spline_tension = -1f;
@@ -454,10 +318,7 @@ public class AutoplayHandler
 
         float u2 = u * u;
 
-        return (2 * (pos1 - pos2) + m1 + m2) * u2 * u
-            + (-3 * (pos1 - pos2) - m1 - m1 - m2) * u2
-            + m1 * u
-            + pos1;
+        return (2 * (pos1 - pos2) + m1 + m2) * u2 * u + (-3 * (pos1 - pos2) - m1 - m1 - m2) * u2 + m1 * u + pos1;
     }
 
     private static Vector2 clampShift(Vector2 shift, float limit)
@@ -476,4 +337,137 @@ public class AutoplayHandler
     private static float sigmoid(float value) => 1 / (1 + Mathf.Exp(-value));
 
     private static float hitboxSize() => (float)(0.5 + Constants.HIT_BOX_SIZE);
+
+    private static int lowerBound(List<AutoNote> notes, double time)
+    {
+        int low = 0;
+        int high = notes.Count;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (notes[middle].Millisecond < time)
+                low = middle + 1;
+            else
+                high = middle;
+        }
+
+        return low;
+    }
+
+    private static List<AutoNote> mergeSimultaneousNotes(List<AutoNote> notes)
+    {
+        for (int i = 1; i < notes.Count; i++)
+        {
+            if (notes[i].Millisecond < notes[i - 1].Millisecond)
+            {
+                notes.Sort((a, b) => a.Millisecond.CompareTo(b.Millisecond));
+                break;
+            }
+        }
+
+        List<AutoNote> merged = new(notes.Count);
+        for (int i = 0; i < notes.Count; )
+        {
+            AutoNote first = notes[i++];
+            Vector2 position = first.Position;
+            int count = 1;
+            while (i < notes.Count && notes[i].Millisecond == first.Millisecond)
+            {
+                position += notes[i++].Position;
+                count++;
+            }
+
+            merged.Add(first.WithPosition(position / count));
+        }
+
+        return merged;
+    }
+
+    private static string getCachePath(List<AutoNote> notes)
+    {
+        using var buffer = new MemoryStream();
+        using var writer = new BinaryWriter(buffer);
+        writer.Write(cache_version);
+        writer.Write(Constants.HIT_BOX_SIZE);
+        writer.Write(Constants.BOUNDS.X);
+        writer.Write(Constants.BOUNDS.Y);
+        foreach (AutoNote note in notes)
+        {
+            writer.Write(note.X);
+            writer.Write(note.Y);
+            writer.Write(note.Millisecond);
+        }
+
+        string hash = Convert.ToHexString(SHA256.HashData(buffer.GetBuffer().AsSpan(0, (int)buffer.Length)));
+        return Path.Combine(Constants.USER_FOLDER, "cache", "autoplay", $"{hash}.bin");
+    }
+
+    private bool tryLoadCache(string path, int noteCount)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var reader = new BinaryReader(stream);
+            if (reader.ReadInt32() != cache_version)
+                return false;
+
+            int count = reader.ReadInt32();
+            if (count <= 0 || count > noteCount || stream.Length != 8L + count * 16L)
+                return false;
+
+            List<AutoNote> cached = new(count);
+            double previousTime = double.NegativeInfinity;
+            for (int i = 0; i < count; i++)
+            {
+                float x = reader.ReadSingle();
+                float y = reader.ReadSingle();
+                double time = reader.ReadDouble();
+                if (!float.IsFinite(x) || !float.IsFinite(y) || !double.IsFinite(time) || time <= previousTime)
+                    return false;
+
+                cached.Add(new(x, y, time));
+                previousTime = time;
+            }
+
+            processedData.AddRange(cached);
+            return true;
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+
+        return false;
+    }
+
+    private void saveCache(string path)
+    {
+        string temporaryPath = path + $".{Guid.NewGuid():N}.tmp";
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            using (var writer = new BinaryWriter(File.Create(temporaryPath)))
+            {
+                writer.Write(cache_version);
+                writer.Write(processedData.Count);
+                foreach (AutoNote note in processedData)
+                {
+                    writer.Write(note.X);
+                    writer.Write(note.Y);
+                    writer.Write(note.Millisecond);
+                }
+            }
+
+            File.Move(temporaryPath, path, true);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        finally
+        {
+            try
+            {
+                File.Delete(temporaryPath);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
 }
