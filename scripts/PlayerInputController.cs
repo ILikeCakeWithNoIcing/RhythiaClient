@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Godot;
 
 public partial class PlayerInputController : Node
@@ -18,6 +18,7 @@ public partial class PlayerInputController : Node
     public event Action OnTogglePaused;
     public event Action OnRestartPressed;
     public event Action OnToggleReplayViewerVisibility;
+    public event Action OnToggleShowOrthonogalCamera;
     public event Action OnPauseOrSkipPressed;
     public event Action OnPauseOrSkipReleased;
     public event Action OnToggleFade;
@@ -27,7 +28,8 @@ public partial class PlayerInputController : Node
 
     public override void _Input(InputEvent @event)
     {
-        if (!IsEnabled) return;
+        if (!IsEnabled)
+            return;
 
         handleInput(@event);
     }
@@ -41,7 +43,8 @@ public partial class PlayerInputController : Node
                 handleMouseInput(@event);
                 break;
             case InputEventKey { PhysicalKeycode: Key.Escape }:
-            case InputEventKey { PhysicalKeycode: Key.F1 }:
+            case InputEventKey { PhysicalKeycode: Key.F2 }:
+            case InputEventKey { PhysicalKeycode: Key.F3 }:
             case InputEventKey { PhysicalKeycode: Key.Space }:
             case InputEventKey { PhysicalKeycode: Key.F }:
             case InputEventKey { PhysicalKeycode: Key.P }:
@@ -58,7 +61,8 @@ public partial class PlayerInputController : Node
 
         if (@event is InputEventMouseButton mouseButton)
         {
-            if (!mouseButton.Pressed || mouseButton.DoubleClick) return;
+            if (!mouseButton.Pressed || mouseButton.DoubleClick)
+                return;
 
             OnLeftMouseButton?.Invoke(mouseButton.Pressed);
         }
@@ -70,7 +74,8 @@ public partial class PlayerInputController : Node
 
         // Functionality with pressing and releasing
 
-        if (key.Echo) return;
+        if (key.Echo)
+            return;
 
         switch (key)
         {
@@ -88,7 +93,8 @@ public partial class PlayerInputController : Node
 
         // Functionality with only pressing
 
-        if (!key.Pressed || key.Echo) return;
+        if (!key.Pressed || key.Echo)
+            return;
 
         switch (key)
         {
@@ -98,8 +104,11 @@ public partial class PlayerInputController : Node
             case { PhysicalKeycode: Key.Quoteleft }:
                 OnRestartPressed?.Invoke();
                 break;
-            case { PhysicalKeycode: Key.F1 }:
+            case { PhysicalKeycode: Key.F2 }:
                 OnToggleReplayViewerVisibility?.Invoke();
+                break;
+            case { PhysicalKeycode: Key.F3 }:
+                OnToggleShowOrthonogalCamera?.Invoke();
                 break;
             case { PhysicalKeycode: Key.F }:
                 OnToggleFade?.Invoke();

@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://dpvrcewd6adj4" path="res://scripts/scenes/Loading.cs" id="1_dhqfv"]
 [ext_resource type="Shader" uid="uid://ujothoxymyrm" path="res://scripts/shaders/uv_split.gdshader" id="2_dhqfv"]
 [ext_resource type="Texture2D" uid="uid://qypjgqt3ct5j" path="res://textures/boot_splash.png" id="2_yt702"]
-[ext_resource type="FontFile" uid="uid://bopde8iqsld1o" path="res://fonts/Ubuntu-Regular.ttf" id="4_2ytni"]
+[ext_resource type="FontFile" uid="uid://bopde8iqsld1o" path="res://fonts/Ubuntu/Ubuntu-Regular.ttf" id="4_2ytni"]
 [ext_resource type="Shader" uid="uid://cxckrd6xtplnx" path="res://scripts/shaders/jukebox_progress.gdshader" id="4_yt702"]
 [ext_resource type="Script" uid="uid://dx2wecnf76cyo" path="res://scripts/ui/AudioSpectrum.cs" id="5_2ytni"]
 

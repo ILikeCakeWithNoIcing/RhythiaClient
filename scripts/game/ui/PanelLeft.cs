@@ -6,16 +6,19 @@ public partial class PanelLeft : UIComponent
     private SubViewport viewport;
     private ShaderMaterial multiplierProgressMaterial;
     private float currentProgress = 0;
-    private Color currentColor = new Color(1, 1, 1, 1);
-    private Color targetMultiplierColour = new Color(1, 1, 1, 1);
+    private Color currentColor = new(1, 1, 1, 1);
+    private Color targetMultiplierColour = new(1, 1, 1, 1);
     private float targetMultiplierProgress = 0;
     private Tween multiplierTween;
 
-    private Label score, multiplier;
+    private Label score,
+        multiplier;
+    private Label altCombo;
 
     public override void _ExitTree()
     {
-        if (Runner.Attempt == null) return;
+        if (Runner.Attempt == null)
+            return;
         Runner.AttemptStatsUpdated -= OnStatsUpdated;
     }
 
@@ -25,6 +28,7 @@ public partial class PanelLeft : UIComponent
         viewport.GetNode<TextureRect>("Background").Texture = SkinManager.Instance.Skin.PanelLeftBackgroundImage;
         score = viewport.GetNode<Label>("Score");
         multiplier = viewport.GetNode<Label>("Multiplier");
+        altCombo = viewport.GetNode<Label>("ComboCount");
 
         multiplierProgressMaterial = viewport.GetNode<Panel>("MultiplierProgress").Material as ShaderMaterial;
         multiplierProgressMaterial.SetShaderParameter("progress", targetMultiplierProgress);
@@ -33,12 +37,15 @@ public partial class PanelLeft : UIComponent
 
         Runner.AttemptStatsUpdated += OnStatsUpdated;
 
-        if (Runner.Attempt.Settings.SimpleHUD || Runner.Attempt.Settings.SuperSimpleHUD)
+        bool isVisible = !Runner.Attempt.Settings.SimpleHUD && !Runner.Attempt.Settings.SuperSimpleHUD;
+
+        Godot.Collections.Array<Node> widgets = viewport.GetChildren();
+        foreach (Node widget in widgets)
         {
-            Godot.Collections.Array<Node> widgets = viewport.GetChildren();
-            foreach (Node widget in widgets)
-                (widget as CanvasItem).Visible = false;
+            (widget as CanvasItem).Visible = isVisible;
         }
+
+        altCombo.Visible = isVisible && Runner.Attempt.Settings.AltComboCounter;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -51,8 +58,9 @@ public partial class PanelLeft : UIComponent
 
     public void OnStatsUpdated(Attempt attempt)
     {
-        score.Text = Util.String.PadMagnitude(attempt.Score.ToString());
+        score.Text = Util.String.PadMagnitude(attempt.Score);
         multiplier.Text = $"{attempt.ComboMultiplier}x";
+        altCombo.Text = $"{attempt.Combo}";
 
         targetMultiplierProgress = (float)attempt.ComboMultiplierProgress / attempt.ComboMultiplierIncrement;
 

@@ -4,7 +4,11 @@ using Godot;
 public partial class PanelRight : UIComponent
 {
     private SubViewport viewport;
-    private Label accuracy, hits, misses, simpleMisses, sum;
+    private Label accuracy,
+        hits,
+        misses,
+        simpleMisses,
+        sum;
     private Tween hitTween;
     private Tween missTween;
     private float hitOpacity = 0.62f;
@@ -12,7 +16,8 @@ public partial class PanelRight : UIComponent
 
     public override void _ExitTree()
     {
-        if (Runner.Attempt == null) return;
+        if (Runner.Attempt == null)
+            return;
         Runner.AttemptStatsUpdated -= OnStatsUpdated;
         Runner.HitResultChanged -= OnHitStateChanged;
     }
@@ -36,13 +41,15 @@ public partial class PanelRight : UIComponent
         Runner.AttemptStatsUpdated += OnStatsUpdated;
         Runner.HitResultChanged += OnHitStateChanged;
 
-        if (Runner.Attempt.Settings.SimpleHUD || Runner.Attempt.Settings.SuperSimpleHUD)
+        bool isVisible = !Runner.Attempt.Settings.SimpleHUD && !Runner.Attempt.Settings.SuperSimpleHUD;
+
+        Godot.Collections.Array<Node> widgets = viewport.GetChildren();
+        foreach (Node widget in widgets)
         {
-            Godot.Collections.Array<Node> widgets = viewport.GetChildren();
-            foreach (Node widget in widgets)
-                (widget as CanvasItem).Visible = false;
-            simpleMisses.Visible = true;
+            (widget as CanvasItem).Visible = isVisible;
         }
+
+        simpleMisses.Visible = !isVisible;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -81,6 +88,6 @@ public partial class PanelRight : UIComponent
         hits.Text = $"{attempt.Hits}";
         misses.Text = $"{attempt.Misses}";
         simpleMisses.Text = $"{attempt.Misses}";
-        sum.Text = Util.String.PadMagnitude(attempt.Sum.ToString());
+        sum.Text = Util.String.PadMagnitude(attempt.Sum);
     }
 }

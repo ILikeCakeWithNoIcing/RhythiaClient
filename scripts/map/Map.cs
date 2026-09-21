@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -9,7 +8,6 @@ using SQLite;
 
 public partial class Map : RefCounted
 {
-
     public static Texture2D DefaultCover = GD.Load<Texture2D>("res://textures/empty.png");
 
     [PrimaryKey]
@@ -17,15 +15,21 @@ public partial class Map : RefCounted
     public int Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
+    public int? CacheVersion { get; set; }
+    public string LastModifiedMetadata { get; set; }
+    public string LastModifiedNotes { get; set; }
 
-    public string Hash { get; set; }
+    /// <summary>
+    /// The hash of the metadata.json, then the objects.phxmo in order
+    /// </summary>
+    public string MetadataObjectHash { get; set; }
 
     public string Collection { get; set; } = string.Empty;
 
     [Ignore]
     public MapSet MapSet { get; set; }
 
-    public string FilePath { get; set; } = string.Empty;
+    public string FolderPath { get; set; } = string.Empty;
 
     public bool Favorite { get; set; }
 
@@ -67,7 +71,11 @@ public partial class Map : RefCounted
     private Texture2D cover = DefaultCover;
 
     [Ignore]
-    public Texture2D Cover { get => getCover(); set => cover = value; }
+    public Texture2D Cover
+    {
+        get => getCover();
+        set => cover = value;
+    }
 
     [Ignore]
     public AudioStream Audio { get; set; } = null;
@@ -80,13 +88,17 @@ public partial class Map : RefCounted
     private Note[] notes;
 
     [Ignore]
-    public Note[] Notes { get => notes ?? TryParseNotes(); set => notes = value; }
+    public Note[] Notes
+    {
+        get => notes ?? TryParseNotes();
+        set => notes = value;
+    }
 
     public Note[] TryParseNotes()
     {
         try
         {
-            notes = MapParser.DecodePHXMO($"{MapUtil.MapsCacheFolder}/{Name}/objects.phxmo");
+            notes = MapParser.DecodePHXMO($"{MapUtil.MapsFolder}/{Name}/objects.phxmo");
             return notes;
         }
         catch
@@ -97,7 +109,7 @@ public partial class Map : RefCounted
 
     private Texture2D getCover()
     {
-        string path = $"{MapUtil.MapsCacheFolder}/{Name}";
+        string path = $"{MapUtil.MapsFolder}/{Name}";
 
         if (cover == DefaultCover && File.Exists($"{path}/cover.png"))
         {
@@ -115,10 +127,32 @@ public partial class Map : RefCounted
 
     public Map() { }
 
-    public Map(string filePath, Note[] data = null, string id = null, string artist = "", string title = "", float rating = 0, string[] mappers = null, int difficulty = 0, string difficultyName = null, int? length = null, byte[] audioBuffer = null, byte[] coverBuffer = null, byte[] videoBuffer = null, bool ephemeral = false, string artistLink = "", string artistPlatform = "")
+    public Map(
+        string folderPath,
+        Note[] data = null,
+        string id = null,
+        string artist = "",
+        string title = "",
+        float rating = 0,
+        string[] mappers = null,
+        int difficulty = 0,
+        string difficultyName = null,
+        int? length = null,
+        byte[] audioBuffer = null,
+        byte[] coverBuffer = null,
+        byte[] videoBuffer = null,
+        bool ephemeral = false,
+        string artistLink = "",
+        string artistPlatform = ""
+    )
     {
-        FilePath = filePath;
+        CacheVersion = 2;
+
+        FolderPath = folderPath;
         Ephemeral = ephemeral;
+        MetadataObjectHash = "";
+        LastModifiedMetadata = "";
+        LastModifiedNotes = "";
         Artist = (artist ?? "").StripEscapes();
         ArtistLink = artistLink;
         ArtistPlatform = artistPlatform;
@@ -137,7 +171,7 @@ public partial class Map : RefCounted
         VideoBuffer = videoBuffer;
         Notes = data ?? [];
         Length = length ?? Notes[^1].Millisecond;
-        Name = id?.Replace(" ", "_") ?? new Regex("[^a-zA-Z0-9_-]").Replace($"{Mappers.Stringify()}_{PrettyTitle}".Replace(" ", "_"), "");
+        Name = Path.GetFileNameWithoutExtension(FolderPath);
         AudioExt = (AudioBuffer != null && Encoding.UTF8.GetString(AudioBuffer[0..4]) == "OggS") ? "ogg" : "mp3";
 
         MapManager.Sanitize(this);
@@ -145,22 +179,26 @@ public partial class Map : RefCounted
 
     public string EncodeMeta()
     {
-        return Json.Stringify(new Godot.Collections.Dictionary()
-        {
-            ["ID"] = Name,
-            ["Artist"] = Artist,
-            ["ArtistLink"] = ArtistLink,
-            ["ArtistPlatform"] = ArtistPlatform,
-            ["Title"] = Title,
-            ["Rating"] = Rating,
-            ["Mappers"] = Mappers,
-            ["Difficulty"] = Difficulty,
-            ["DifficultyName"] = DifficultyName,
-            ["Length"] = Length,
-            ["HasAudio"] = AudioBuffer != null,
-            ["HasCover"] = CoverBuffer != null,
-            ["HasVideo"] = VideoBuffer != null,
-            ["AudioExt"] = AudioExt
-        }, "\t");
+        string path = $"{MapUtil.MapsFolder}/{Name}";
+        return Json.Stringify(
+            new Godot.Collections.Dictionary()
+            {
+                ["ID"] = Name,
+                ["Artist"] = Artist,
+                ["ArtistLink"] = ArtistLink,
+                ["ArtistPlatform"] = ArtistPlatform,
+                ["Title"] = Title,
+                ["Rating"] = Rating,
+                ["Mappers"] = Mappers,
+                ["Difficulty"] = Difficulty,
+                ["DifficultyName"] = DifficultyName,
+                ["Length"] = Length,
+                ["HasAudio"] = AudioBuffer != null && File.Exists($"{path}/audio.{AudioExt}"),
+                ["HasCover"] = CoverBuffer != null && File.Exists($"{path}/cover.png"),
+                ["HasVideo"] = VideoBuffer != null && File.Exists($"{path}/video.mp4"),
+                ["AudioExt"] = AudioExt,
+            },
+            "\t"
+        );
     }
 }

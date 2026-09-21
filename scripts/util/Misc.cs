@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
 using Godot;
 
 namespace Util;
@@ -64,6 +68,21 @@ public class Misc
         }
     }
 
+    public static byte[] HashFiles(string[] paths)
+    {
+        using var md5 = MD5.Create();
+
+        foreach (string path in paths) // we do not need to order the paths since it will always be the same -fog
+        {
+            byte[] fileData = File.ReadAllBytes(path);
+            md5.TransformBlock(fileData, 0, fileData.Length, null, 0);
+        }
+
+        md5.TransformFinalBlock([], 0, 0);
+
+        return md5.Hash;
+    }
+
     public static void CopyReference(Node node, Node reference)
     {
         CopyProperties(node, reference);
@@ -99,31 +118,52 @@ public class Misc
             return img;
         }
 
-        bool isWebp = buffer.Length >= 12
-            && buffer[0] == 0x52 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x46
-            && buffer[8] == 0x57 && buffer[9] == 0x45 && buffer[10] == 0x42 && buffer[11] == 0x50;
+        bool isWebp =
+            buffer.Length >= 12
+            && buffer[0] == 0x52
+            && buffer[1] == 0x49
+            && buffer[2] == 0x46
+            && buffer[3] == 0x46
+            && buffer[8] == 0x57
+            && buffer[9] == 0x45
+            && buffer[10] == 0x42
+            && buffer[11] == 0x50;
         if (isWebp && img.LoadWebpFromBuffer(buffer) == Error.Ok)
         {
             return img;
         }
 
-        Logger.Log($"""
-        Couldn't load image from buffer
-            Type: {(isPng ? "PNG" : isJpeg ? "JPG" : isBmp ? "BMP" : isWebp ? "WEBP" : "Unknown")};
-            Size: {buffer.Length}
-        """);
+        Logger.Log(
+            $"""
+            Couldn't load image from buffer
+                Type: {(
+                isPng ? "PNG"
+                : isJpeg ? "JPG"
+                : isBmp ? "BMP"
+                : isWebp ? "WEBP"
+                : "Unknown"
+            )};
+                Size: {buffer.Length}
+            """
+        );
 
         return null;
     }
 
     public static Color ParseColor(string hex, Color fallback)
     {
-        if (string.IsNullOrWhiteSpace(hex)) { return fallback; }
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return fallback;
+        }
 
         try
         {
             hex = hex.Trim();
-            if (!hex.StartsWith('#')) { hex = "#" + hex; }
+            if (!hex.StartsWith('#'))
+            {
+                hex = "#" + hex;
+            }
             return Color.FromHtml(hex);
         }
         catch
@@ -135,7 +175,10 @@ public class Misc
 
     public static float ParseFloatInput(string input, float fallback = 0f)
     {
-        if (string.IsNullOrWhiteSpace(input)) { return fallback; }
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return fallback;
+        }
 
         string normalized = input.Replace(',', '.');
         if (float.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out float result))
@@ -144,5 +187,27 @@ public class Misc
         }
 
         return fallback;
+    }
+
+    public static int BinarySearch(double[] values, double time)
+    {
+        int left = 0,
+            right = values.Length;
+
+        while (left < right)
+        {
+            int middle = (left + right) / 2;
+
+            if (time < values[middle])
+            {
+                right = middle;
+            }
+            else
+            {
+                left = middle + 1;
+            }
+        }
+
+        return left - 1;
     }
 }

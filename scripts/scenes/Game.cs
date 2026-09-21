@@ -3,18 +3,31 @@ using Godot;
 
 public partial class Game : BaseScene
 {
-    [Export] public Runner Runner;
-    [Export] public PauseMenu Menu;
-    [Export] public PlaytestOverlay PlaytestOverlay;
-    [Export] public ReplayManager ReplayManager { get; private set; }
-    [Export] public PlayerInputController PlayerInputController { get; private set; }
-    [Export] public CursorManager CursorManager { get; private set; }
+    [Export]
+    public Runner Runner;
 
-    [Signal] public delegate void StartTempPauseEventHandler(Attempt attempt);
+    [Export]
+    public PauseMenu Menu;
+
+    [Export]
+    public PlaytestOverlay PlaytestOverlay;
+
+    [Export]
+    public ReplayManager ReplayManager { get; private set; }
+
+    [Export]
+    public PlayerInputController PlayerInputController { get; private set; }
+
+    [Export]
+    public CursorManager CursorManager { get; private set; }
+
+    [Signal]
+    public delegate void StartTempPauseEventHandler(Attempt attempt);
 
     public static Game Instance;
     public static Attempt Attempt;
     public static bool StartQueued = false;
+    private static double fadeoutToggleValue = -1;
 
     public override void _Ready()
     {
@@ -33,7 +46,8 @@ public partial class Game : BaseScene
 
         PlayerInputController.OnMouseMove += (relative, absolute) =>
         {
-            if (!Runner.Playing || Attempt.IsReplay) return;
+            if (!Runner.Playing || Attempt.IsReplay)
+                return;
 
             if (Attempt.Settings.AbsoluteInput)
             {
@@ -51,10 +65,7 @@ public partial class Game : BaseScene
             Attempt.DistanceMM += relative.Length() / Attempt.Settings.Sensitivity / 57.5;
         };
 
-        PlayerInputController.OnLeftMouseButton += isPressed =>
-        {
-
-        };
+        PlayerInputController.OnLeftMouseButton += isPressed => { };
 
         PlayerInputController.OnTogglePaused += () =>
         {
@@ -69,7 +80,8 @@ public partial class Game : BaseScene
             }
             else
             {
-                if (Rhythia.TempMode && !PlaytestOverlay.PlaytestInit) return;
+                if (Rhythia.TempMode && !PlaytestOverlay.PlaytestInit)
+                    return;
                 Menu.ShowMenu(!Menu.Shown);
             }
         };
@@ -79,6 +91,14 @@ public partial class Game : BaseScene
             if (Attempt.IsReplay)
             {
                 ReplayManager.ShowReplayViewer(Attempt);
+            }
+        };
+
+        PlayerInputController.OnToggleShowOrthonogalCamera += () =>
+        {
+            if (Attempt.IsReplay)
+            {
+                ReplayManager.ShowOrthonogalCamera(Attempt);
             }
         };
 
@@ -94,7 +114,8 @@ public partial class Game : BaseScene
             }
             else
             {
-                if (Lobby.Players.Count > 1) return;
+                if (Lobby.Players.Count > 1)
+                    return;
                 Runner.Skip();
 
                 // Space To Pause
@@ -109,8 +130,23 @@ public partial class Game : BaseScene
         // {
 
         // };
+        PlayerInputController.OnToggleFade += () =>
+        {
+            double val;
 
-        PlayerInputController.OnToggleFade += () => Attempt.Settings.FadeOut.Value = Attempt.Settings.FadeOut > 0 ? 0 : 100;
+            if (Attempt.Settings.FadeOut.Value > 0)
+            {
+                fadeoutToggleValue = Attempt.Settings.FadeOut.Value;
+                val = 0;
+            }
+            else
+            {
+                val = fadeoutToggleValue == -1 ? 100 : fadeoutToggleValue;
+            }
+
+            Attempt.Settings.FadeOut.Value = val;
+        };
+
         PlayerInputController.OnTogglePushback += () => Attempt.Settings.Pushback.Value = !Attempt.Settings.Pushback;
         PlayerInputController.OnRestartPressed += Restart;
     }
@@ -134,6 +170,7 @@ public partial class Game : BaseScene
         Runner.Attempt = Attempt;
         ReplayManager.InitReplayLength();
         ReplayManager.ShowReplayViewer(Runner.Attempt, Runner.Attempt.IsReplay);
+        ReplayManager.ShowOrthonogalCamera(Runner.Attempt, Runner.Attempt.IsReplay);
 
         Menu.HideMenu(true);
 
@@ -156,6 +193,13 @@ public partial class Game : BaseScene
         Runner.Play();
         StartQueued = false;
 
+        if (!Attempt.IsReplay)
+        {
+            Stats.Instance.Attempts++;
+            Attempt.Map.PlayCount++;
+            MapManager.Update(Attempt.Map);
+        }
+
         if (Rhythia.TempMode && !PlaytestOverlay.PlaytestInit)
         {
             PlaytestOverlay.Attempt = Attempt;
@@ -164,21 +208,23 @@ public partial class Game : BaseScene
         }
     }
 
-    public static void Play(Map map, double speed, double startFrom, CameraMode cameraMode, List<Modifier> mods, string[] players = null, Replay[] replays = null)
+    public static void Play(
+        Map map,
+        double speed,
+        double startFrom,
+        CameraMode cameraMode,
+        List<Modifier> mods,
+        string[] players = null,
+        Replay[] replays = null
+    )
     {
-        if (StartQueued) return;
+        if (StartQueued)
+            return;
 
         StartQueued = true;
 
-        var parsedMap = MapParser.Decode(map.FilePath, Rhythia.AudioFilePath);
+        var parsedMap = MapParser.Decode(map.FolderPath, Rhythia.AudioFilePath);
         Attempt = new(parsedMap, speed, startFrom, cameraMode, mods, players, replays);
-
-        if (!Attempt.IsReplay)
-        {
-            Stats.Instance.Attempts++;
-            map.PlayCount++;
-            MapManager.Update(map);
-        }
 
         SceneManager.Load("res://scenes/game.tscn");
     }
@@ -189,8 +235,16 @@ public partial class Game : BaseScene
         Runner.Stop(false);
 
         var oldAttempt = Attempt;
-        var map = MapParser.Decode(oldAttempt.Map.FilePath, Rhythia.AudioFilePath);
-        Attempt = new(map, oldAttempt.Speed, oldAttempt.StartFrom, oldAttempt.CameraMode, oldAttempt.Modifiers, oldAttempt.Players, oldAttempt.Replays);
+        var map = MapParser.Decode(oldAttempt.Map.FolderPath, Rhythia.AudioFilePath);
+        Attempt = new(
+            map,
+            oldAttempt.Speed,
+            oldAttempt.StartFrom,
+            oldAttempt.CameraMode,
+            oldAttempt.Modifiers,
+            oldAttempt.Players,
+            oldAttempt.Replays
+        );
 
         SceneManager.ReloadCurrentScene();
     }

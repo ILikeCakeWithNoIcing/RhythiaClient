@@ -37,16 +37,21 @@ public partial class MainMenu : BaseScene
 
         Input.MouseMode = SettingsManager.Instance.Settings.UseCursorInMenus ? Input.MouseModeEnum.Hidden : Input.MouseModeEnum.Visible;
 
-        List<Node> menuButtons = [.. HomeMenu.GetNode("Buttons").GetChildren()];
+        List<Node> menuButtons = [];
         menuButtons.AddRange(topBarButtonsContainer.GetChildren());
 
-        foreach (Button button in menuButtons)
+        foreach (var container in HomeMenu.GetNode("Buttons").GetChildren())
         {
-            Panel menu = (Panel)menuHolder.FindChild(button.Name, false);
+            menuButtons.Add(container.GetChild<Button>(0));
+        }
+
+        foreach (Button button in menuButtons.Cast<Button>())
+        {
+            var menu = (Panel)menuHolder.FindChild(button.Name, false);
 
             if (menu != null)
             {
-                button.Pressed += () => { Transition(menu); };
+                button.Pressed += () => Transition(menu);
             }
         }
     }
@@ -84,7 +89,9 @@ public partial class MainMenu : BaseScene
     {
         base.Load();
 
-        DisplayServer.WindowSetVsyncMode(SettingsManager.Instance.Settings.VSyncMenus ? DisplayServer.VSyncMode.Adaptive : DisplayServer.VSyncMode.Disabled);
+        DisplayServer.WindowSetVsyncMode(
+            SettingsManager.Instance.Settings.VSyncMenus ? DisplayServer.VSyncMode.Adaptive : DisplayServer.VSyncMode.Disabled
+        );
 
         // Apply any map selection that was deferred while menu was off-tree (e.g. import from another scene)
         MapInfo.ApplyPendingSelection();
@@ -117,7 +124,10 @@ public partial class MainMenu : BaseScene
 
     public void Transition(Panel menu, bool instant = false)
     {
-        if (CurrentMenu == menu) { return; }
+        if (CurrentMenu == menu)
+        {
+            return;
+        }
 
         LastMenu = CurrentMenu;
         CurrentMenu = menu;
@@ -129,7 +139,12 @@ public partial class MainMenu : BaseScene
 
         Tween outTween = CreateTween().SetTrans(Tween.TransitionType.Quad).SetEase(Tween.EaseType.In);
         outTween.TweenProperty(LastMenu, "modulate", Color.Color8(255, 255, 255, 0), tweenTime);
-        outTween.TweenCallback(Callable.From(() => { LastMenu.Visible = false; }));
+        outTween.TweenCallback(
+            Callable.From(() =>
+            {
+                LastMenu.Visible = false;
+            })
+        );
 
         CurrentMenu.Visible = true;
 

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using Godot;
@@ -9,40 +10,53 @@ public partial class ReplayManager : Node
     {
         NONE,
         RECORD,
-        PLAYBACK
+        PLAYBACK,
     }
 
-    [Export] public Runner Runner { get; set; }
-    [Export] public Mode CurrentMode { get; set; }
-    [Export] public Panel ReplayViewer { get; set; }
-    [Export] public CursorManager CursorManager { get; private set; }
+    [Export]
+    public Runner Runner { get; set; }
+
+    [Export]
+    public Mode CurrentMode { get; set; }
+
+    [Export]
+    public Panel ReplayViewer { get; set; }
+
+    [Export]
+    public CursorManager CursorManager { get; private set; }
 
     public bool ViewerVisible;
+    public bool CanShow;
 
     // only public variable because of Game
     public static TextureButton SeekerPause;
+    private static Panel orthogonalPanel;
     private static Label seekerTime;
+    private static Label tip;
+    private static Panel background;
     private static HSlider seekerTimeline;
     private static bool seekerHovered;
     public float ReplayLength;
     public string ReplayPath;
     public Vector2 CursorPosition { get; private set; }
 
-    private FileAccess file;
-    private ulong statusOffset, frameCountOffset;
+    private Godot.FileAccess file;
+    private ulong statusOffset,
+        frameCountOffset;
 
     public void NewReplay(Attempt attempt)
     {
         var settings = attempt.Settings;
 
-        if (!settings.RecordReplays || Rhythia.TempMode) return;
+        if (!settings.RecordReplays || Rhythia.TempMode)
+            return;
 
         ReplayPath = $"{Constants.USER_FOLDER}/replays/{attempt.ID}.phxr";
 
-        file = FileAccess.Open(ReplayPath, FileAccess.ModeFlags.Write);
+        file = Godot.FileAccess.Open(ReplayPath, Godot.FileAccess.ModeFlags.Write);
 
-        file.StoreString("phxr");  // sig
-        file.Store8(1);    // replay file version
+        file.StoreString("phxr"); // sig
+        file.Store8(1); // replay file version
 
         file.StoreDouble(attempt.Speed);
         file.StoreDouble(attempt.StartFrom);
@@ -69,7 +83,7 @@ public partial class ReplayManager : Node
         }
 
         string serializedMods = string.Join("_", mods);
-        string mapName = attempt.Map.FilePath.GetFile().GetBaseName();
+        string mapName = Path.GetFileName(attempt.Map.FolderPath);
         string player = "You";
 
         void storeSizedString(string data)
@@ -84,12 +98,15 @@ public partial class ReplayManager : Node
         storeSizedString(player);
 
         frameCountOffset = (uint)file.GetPosition();
-        file.Store64(0);   // reserve frame count
+        file.Store64(0); // reserve frame count
     }
 
     public void SaveReplay(Attempt attempt)
     {
-        if (file == null || !file.IsOpen()) { return; }
+        if (file == null || !file.IsOpen())
+        {
+            return;
+        }
 
         file.Seek(statusOffset);
         file.Store8((byte)(attempt.Alive ? (attempt.Qualifies ? 0 : 1) : 2));
@@ -126,7 +143,7 @@ public partial class ReplayManager : Node
         file.Close();
 
         // open replay to store hash
-        file = FileAccess.Open($"{Constants.USER_FOLDER}/replays/{attempt.ID}.phxr", FileAccess.ModeFlags.ReadWrite);
+        file = Godot.FileAccess.Open($"{Constants.USER_FOLDER}/replays/{attempt.ID}.phxr", Godot.FileAccess.ModeFlags.ReadWrite);
         ulong length = file.GetLength();
         byte[] hash = SHA256.HashData(file.GetBuffer((long)length));
         file.StoreBuffer(hash);
@@ -138,7 +155,8 @@ public partial class ReplayManager : Node
 
     public void InitReplayLength()
     {
-        if (Runner?.Attempt == null || !Runner.Attempt.IsReplay) return;
+        if (Runner?.Attempt == null || !Runner.Attempt.IsReplay)
+            return;
         ReplayLength = Runner.Attempt.MaxReplayLength;
     }
 
@@ -147,8 +165,11 @@ public partial class ReplayManager : Node
         base._Ready();
 
         // this entire code lowkey sucks, so i am just copy and pasting it because i am lazy -fog
+        orthogonalPanel = ReplayViewer.GetNode<Panel>("OrthogonalPanel");
         SeekerPause = ReplayViewer.GetNode<TextureButton>("Pause");
         seekerTime = ReplayViewer.GetNode<Label>("Time");
+        tip = ReplayViewer.GetNode<Label>("Tip");
+        background = ReplayViewer.GetNode<Panel>("Background");
         seekerTimeline = ReplayViewer.GetNode<HSlider>("Seek");
         CursorManager ??= GetNode<CursorManager>("CursorManager");
 
@@ -179,7 +200,8 @@ public partial class ReplayManager : Node
 
     public override void _Process(double delta)
     {
-        if (!Runner.Attempt.IsReplay || !Runner.Playing) return;
+        if (!Runner.Attempt.IsReplay || !Runner.Playing)
+            return;
 
         if (!seekerHovered)
         {
@@ -199,23 +221,31 @@ public partial class ReplayManager : Node
         ViewerVisible = show ?? !ViewerVisible;
         bool visible = ViewerVisible && attempt.IsReplay;
 
-        ReplayViewer.Visible = visible;
+        SeekerPause.Visible = visible;
+        seekerTime.Visible = visible;
+        seekerTimeline.Visible = visible;
+        tip.Visible = visible;
+        background.Visible = visible;
 
         if (attempt.IsReplay)
         {
-            Input.MouseMode = visible
-                ? Input.MouseModeEnum.Visible
-                : Input.MouseModeEnum.Hidden;
+            Input.MouseMode = visible ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Hidden;
         }
+    }
+
+    public void ShowOrthonogalCamera(Attempt attempt, bool? show = null)
+    {
+        CanShow = show ?? !CanShow;
+        bool visible = CanShow && attempt.IsReplay;
+
+        orthogonalPanel.Visible = visible && attempt.IsReplay;
     }
 
     public void TogglePause()
     {
         Runner.Pause();
 
-        string texturePath = Runner.Playing
-            ? "res://textures/ui/pause.png"
-            : "res://textures/ui/play.png";
+        string texturePath = Runner.Playing ? "res://textures/ui/pause.png" : "res://textures/ui/play.png";
 
         SeekerPause.TextureNormal = GD.Load<Texture2D>(texturePath);
     }
@@ -291,11 +321,11 @@ public partial class ReplayManager : Node
         {
             var replay = Runner.Attempt.Replays[i];
 
-            if (replay.FrameIndex == replay.Frames.Length - 1) continue;
+            if (replay.FrameIndex == replay.Frames.Length - 1)
+                continue;
 
             // advance frame forward deterministically making sure frames only advance when allowed
-            while (replay.FrameIndex < replay.Frames.Length - 1 &&
-                   Runner.Attempt.Progress >= replay.Frames[replay.FrameIndex + 1].Progress)
+            while (replay.FrameIndex < replay.Frames.Length - 1 && Runner.Attempt.Progress >= replay.Frames[replay.FrameIndex + 1].Progress)
             {
                 replay.FrameIndex++;
 
@@ -311,16 +341,9 @@ public partial class ReplayManager : Node
             var currentFrame = replay.Frames[replay.FrameIndex];
             var nextFrame = replay.Frames[next];
 
-            double inverse = Mathf.InverseLerp(
-                currentFrame.Progress,
-                nextFrame.Progress,
-                Runner.Attempt.Progress
-            );
+            double inverse = Mathf.InverseLerp(currentFrame.Progress, nextFrame.Progress, Runner.Attempt.Progress);
 
-            Vector2 cursorPos = currentFrame.CursorPosition.Lerp(
-                nextFrame.CursorPosition,
-                (float)Math.Clamp(inverse, 0, 1)
-            );
+            Vector2 cursorPos = currentFrame.CursorPosition.Lerp(nextFrame.CursorPosition, (float)Math.Clamp(inverse, 0, 1));
 
             CursorPosition = cursorPos;
 

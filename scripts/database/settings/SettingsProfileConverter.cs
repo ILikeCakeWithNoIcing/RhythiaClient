@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
@@ -11,10 +11,7 @@ public class SettingsProfileConverter
 
     public static string Serialize(SettingsProfile profile)
     {
-        Dictionary data = new()
-        {
-            ["_Version"] = version
-        };
+        Dictionary data = new() { ["_Version"] = version };
 
         foreach (var property in typeof(SettingsProfile).GetProperties())
         {
@@ -57,7 +54,6 @@ public class SettingsProfileConverter
                     item.SetVariant(data[property.Name]);
                 }
             }
-
         }
         catch (Exception)
         {

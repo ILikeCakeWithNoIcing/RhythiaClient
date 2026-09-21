@@ -25,6 +25,22 @@ public partial class BaseSpace : Node3D
         WorldEnvironment = GetNode<WorldEnvironment>("WorldEnvironment");
     }
 
+    private void onHitResultChanged(int noteIndex, HitResult hitResult)
+    {
+        if (hitResult == HitResult.Hit)
+        {
+            OnHit(Game.Instance.Runner.Attempt.Combo);
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        if (Game.Instance?.Runner != null)
+        {
+            Game.Instance.Runner.HitResultChanged -= onHitResultChanged;
+        }
+    }
+
     public override void _Process(double delta)
     {
         base._Process(delta);
@@ -37,6 +53,8 @@ public partial class BaseSpace : Node3D
             }
         }
     }
+
+    public virtual void OnHit(uint combo) { }
 
     public virtual void Load()
     {
@@ -54,5 +72,11 @@ public partial class BaseSpace : Node3D
     {
         Playing = playing;
         Camera.Current = !Playing;
+
+        if (Playing && Game.Instance?.Runner != null)
+        {
+            Game.Instance.Runner.HitResultChanged -= onHitResultChanged;
+            Game.Instance.Runner.HitResultChanged += onHitResultChanged;
+        }
     }
 }

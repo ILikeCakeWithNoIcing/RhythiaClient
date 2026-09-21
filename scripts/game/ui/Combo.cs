@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Godot;
 
 public partial class Combo : UIComponent
@@ -7,17 +8,18 @@ public partial class Combo : UIComponent
 
     public override void OnExitTree()
     {
-        if (Runner.Attempt == null) return;
+        if (Runner.Attempt == null)
+            return;
         Runner.AttemptStatsUpdated -= OnStatsUpdated;
     }
 
     public override void Init()
     {
         label = GetNode<Label3D>("Label");
-
-        if (Runner.Attempt.Settings.SuperSimpleHUD)
+        label.Visible = !Runner.Attempt.Settings.SuperSimpleHUD;
+        if (!Runner.Attempt.Settings.SuperSimpleHUD)
         {
-            label.Visible = false;
+            label.Visible = !Runner.Attempt.Settings.AltComboCounter;
         }
 
         Runner.AttemptStatsUpdated += OnStatsUpdated;
@@ -25,6 +27,6 @@ public partial class Combo : UIComponent
 
     public void OnStatsUpdated(Attempt attempt)
     {
-        label.Text = attempt.Combo.ToString();
+        label.Text = attempt.Combo.ToString(CultureInfo.CurrentCulture);
     }
 }

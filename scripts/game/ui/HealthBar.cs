@@ -7,12 +7,13 @@ public partial class HealthBar : UIComponent
     private TextureRect healthBarTexture;
     private TextureRect healthBarBGTexture;
     private Tween tween;
-    private Vector2 targetSize = new Vector2(1088, 80);
-    private Vector2 currentSize = new Vector2(1088, 80);
+    private Vector2 targetSize = new(1088, 80);
+    private Vector2 currentSize = new(1088, 80);
 
     public override void _ExitTree()
     {
-        if (Runner.Attempt == null) return;
+        if (Runner.Attempt == null)
+            return;
         Runner.AttemptStatsUpdated -= OnStatsUpdated;
         tween?.Kill();
     }
@@ -27,11 +28,8 @@ public partial class HealthBar : UIComponent
 
         healthBarTexture.Modulate = new(0xffffffff);
 
-        if (Runner.Attempt.Settings.SuperSimpleHUD)
-        {
-            healthBarTexture.Visible = false;
-            healthBarBGTexture.Visible = false;
-        }
+        healthBarTexture.Visible = !Runner.Attempt.Settings.SuperSimpleHUD;
+        healthBarBGTexture.Visible = !Runner.Attempt.Settings.SuperSimpleHUD;
 
         Runner.AttemptStatsUpdated += OnStatsUpdated;
     }

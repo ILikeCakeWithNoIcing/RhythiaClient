@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Godot;
 
 public partial class FlatPreview : Panel
@@ -13,16 +14,13 @@ public partial class FlatPreview : Panel
     private Color transparent = new(1, 1, 1, 0);
     private ColorRect[] tiles = new ColorRect[9];
     private int lastPassedNote = 0;
+    private double[] noteTimestamps;
 
     public override void _Ready()
     {
         for (int i = 0; i < 9; i++)
         {
-            ColorRect tile = new()
-            {
-                Name = i.ToString(),
-                Color = transparent
-            };
+            ColorRect tile = new() { Name = i.ToString(CultureInfo.CurrentCulture), Color = transparent };
 
             AddChild(tile);
 
@@ -41,7 +39,8 @@ public partial class FlatPreview : Panel
 
     public override void _Process(double delta)
     {
-        if (Map == null) return;
+        if (Map == null)
+            return;
 
         float alpha = (float)Math.Min(1, delta * 6);
 
@@ -69,14 +68,7 @@ public partial class FlatPreview : Panel
 
         if (Time < oldTime)
         {
-            for (int i = 0; i < Map.Notes.Length; i++)
-            {
-                if (Time < Map.Notes[i].Millisecond)
-                {
-                    lastPassedNote = i - 1;
-                    break;
-                }
-            }
+            lastPassedNote = Util.Misc.BinarySearch(noteTimestamps, Time);
         }
 
         for (int i = Math.Clamp(lastPassedNote + 1, 0, Math.Max(0, Map.Notes.Length - 1)); i < Map.Notes.Length; i++)
@@ -100,28 +92,22 @@ public partial class FlatPreview : Panel
 
     public void Setup(Map map, bool useSoundManagerStreamPlayer = false)
     {
-        if (Map != null && Map.Name == map.Name) return;
+        if (Map != null && Map.Name == map.Name)
+            return;
 
         Map = map;
         UseSoundManagerStreamPlayer = useSoundManagerStreamPlayer;
         lastPassedNote = -1;
+        noteTimestamps = Array.ConvertAll(Map.Notes, note => (double)note.Millisecond);
     }
 
     public void Seek(double seek)
     {
-        if (Map == null) return;
+        if (Map == null)
+            return;
 
         Time = seek;
 
-        for (int i = 0; i < Map.Notes.Length; i++)
-        {
-            var note = Map.Notes[i];
-
-            if (note.Millisecond > Time)
-            {
-                lastPassedNote = i - 1;
-                break;
-            }
-        }
+        lastPassedNote = Util.Misc.BinarySearch(noteTimestamps, seek);
     }
 }
