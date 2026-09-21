@@ -53,6 +53,7 @@
 [ext_resource type="Texture2D" uid="uid://c60rl8itmawe7" path="res://textures/ui/github_pressed.png" id="42_mb34c"]
 [ext_resource type="Texture2D" uid="uid://cfl8us0rpkpqs" path="res://textures/ui/github_hovered.png" id="43_sgh51"]
 [ext_resource type="Script" uid="uid://c1235cyjfh4rl" path="res://scripts/ui/LinkPopupButton.cs" id="44_ybca7"]
+[ext_resource type="Script" uid="uid://dqi64p5jl23cv" path="res://scripts/ui/menu/VersionLabel.cs" id="45_mb34c"]
 [ext_resource type="Texture2D" uid="uid://8du82a5dxjdk" path="res://user/skins/default/ui/jukebox_play.png" id="48_q1l3m"]
 [ext_resource type="Texture2D" uid="uid://bpsvcunhigs6c" path="res://user/skins/default/ui/jukebox_skip.png" id="49_7u5pb"]
 
@@ -1858,9 +1859,10 @@ grow_vertical = 2
 theme_override_fonts/normal_font = ExtResource("19_c6nra")
 theme_override_font_sizes/normal_font_size = 18
 bbcode_enabled = true
-text = "Rhythia [font_size=12][color=ffffffa0]0.2.0"
+text = "Rhythia [font_size=12][color=ffffffa0]{0}"
 shortcut_keys_enabled = false
 vertical_alignment = 1
+script = ExtResource("45_mb34c")
 
 [node name="MenuButtons" type="HBoxContainer" parent="TopBar" unique_id=1927365414]
 layout_mode = 1
