@@ -970,7 +970,7 @@ public partial class SettingsProfile
         {
             Id = "VisibilityAssist",
             Title = "Visibility Assist",
-            Description = "Enables a dark radial fade to help with visibility",
+            Description = "Enables a dark radial fade to help with visibility (impacts performance significantly)",
             Section = SettingsSection.Visual,
         };
 
