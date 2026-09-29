@@ -27,8 +27,7 @@ public partial class SettingsMenu : ColorRect
     [Export]
     public FileDialog ImportNightlyDialog;
 
-    [Export]
-    public FileDialog UserFolderDialog;
+    [Export] public FileDialog UserFolderDialog;
 
     public override void _Ready()
     {
@@ -420,10 +419,7 @@ public partial class SettingsMenu : ColorRect
             }
         }
 
-        if (setting.Placeholder != "")
-        {
-            lineEdit.PlaceholderText = setting.Placeholder;
-        }
+        if (setting.Placeholder != "") { lineEdit.PlaceholderText = setting.Placeholder; }
 
         lineEdit.FocusExited += applyLineEdit;
         lineEdit.TextSubmitted += (_) =>
