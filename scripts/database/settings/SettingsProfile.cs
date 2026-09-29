@@ -200,6 +200,12 @@ public partial class SettingsProfile
     public SettingsItem<bool> UseCursorInMenus { get; private set; }
 
     /// <summary>
+    /// Adjusts the easing when the HP Bar is updated
+    /// </summary>
+    [Order]
+    public SettingsItem<double> HPLerpValue { get; private set; }
+
+    /// <summary>
     /// Adjusts the video background dim
     /// </summary>
     //[Order]
@@ -890,6 +896,20 @@ public partial class SettingsProfile
             Section = SettingsSection.Visual,
         };
 
+        HPLerpValue = new(60f)
+        {
+            Id = "HPLerpValue",
+            Title = "HP Bar Easing Value",
+            Description = "Adjusts how smooth, or harsh, the HP Bar eases in while it updates",
+            Section = SettingsSection.Visual,
+            Slider = new()
+            {
+                Step = 1f,
+                MinValue = 10,
+                MaxValue = 100,
+            },
+        };
+
         //VideoDim = new(80)
         //{
         //Id = "VideoDim",
@@ -950,7 +970,7 @@ public partial class SettingsProfile
         {
             Id = "VisibilityAssist",
             Title = "Visibility Assist",
-            Description = "Enables a dark radial fade to help with visibility",
+            Description = "Enables a dark radial fade to help with visibility (impacts performance significantly)",
             Section = SettingsSection.Visual,
         };
 
@@ -1320,10 +1340,11 @@ public partial class SettingsProfile
             Description = "Set the path where Rhythia stores it's files",
             Section = SettingsSection.Other,
             Placeholder = Constants.DEFAULT_USER_FOLDER,
-            UpdateAction = (value, _) => {
+            UpdateAction = (value, _) =>
+            {
                 SettingsManager.SetUserFolder(value);
             },
-            SaveToDisk = false
+            SaveToDisk = false,
         };
 
         SetUserFolderDialog = new(default)
@@ -1334,24 +1355,46 @@ public partial class SettingsProfile
             Section = SettingsSection.Other,
             Buttons =
             [
-                new() { Title = "Open Previous User Folder", Description = "Open the path to the previously used User Folder", OnPressed = () => {
-                    if (Constants.PREVIOUS_USER_FOLDER == "")
+                new()
+                {
+                    Title = "Open Previous User Folder",
+                    Description = "Open the path to the previously used User Folder",
+                    OnPressed = () =>
                     {
-                        var popup = new OptionPopup("No Previous User Folder Found", "You have no previous user folder. Either you didn't change your User Folder (and that's fine) or the record of it got deleted.");
+                        if (Constants.PREVIOUS_USER_FOLDER == "")
+                        {
+                            var popup = new OptionPopup(
+                                "No Previous User Folder Found",
+                                "You have no previous user folder. Either you didn't change your User Folder (and that's fine) or the record of it got deleted."
+                            );
 
-                        popup.AddOption("Ok", Callable.From(() => {
-                            SettingsMenu.Instance.Show();
-                        }));
+                            popup.AddOption(
+                                "Ok",
+                                Callable.From(() =>
+                                {
+                                    SettingsMenu.Instance.Show();
+                                })
+                            );
 
-                        SettingsMenu.Instance.Hide();
-                        popup.Show();
-                    }
-                    else { OS.ShellShowInFileManager(Constants.PREVIOUS_USER_FOLDER); }
-                }},
-                new() { Title = "Set User Folder Path", Description = "Choose the path to the User Folder", OnPressed = () => {
-                    SettingsMenu.Instance.UserFolderDialog.PopupCentered();
-                }}
-            ]
+                            SettingsMenu.Instance.Hide();
+                            popup.Show();
+                        }
+                        else
+                        {
+                            OS.ShellShowInFileManager(Constants.PREVIOUS_USER_FOLDER);
+                        }
+                    },
+                },
+                new()
+                {
+                    Title = "Set User Folder Path",
+                    Description = "Choose the path to the User Folder",
+                    OnPressed = () =>
+                    {
+                        SettingsMenu.Instance.UserFolderDialog.PopupCentered();
+                    },
+                },
+            ],
         };
 
         DisplayFPS = new(true)
